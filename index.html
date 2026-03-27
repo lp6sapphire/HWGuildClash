@@ -61,11 +61,11 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
   <h2 style="margin:0">Our Team</h2>
   <span style="flex:1"></span>
+  <button class="btn" onclick="addOur()">+ Player</button>
   <button class="btn" onclick="sortOur();renderOur()">↕ Sort</button>
   <button class="btn" style="font-size:10px" onclick="clearOurPower()">🗑 Clear power</button>
 </div>
 <div class="ogrid" id="ourGrid"></div>
-<button class="btn" style="margin-top:4px" onclick="addOur()">+ Player</button>
 <div style="font-size:10px;color:var(--tx3);margin-top:2px">Atk+Def=Total (auto). % = share of total. Enter: Atk→Def→next player.</div>
 
 <h2 style="margin-top:14px">Rounds (5 enemies)</h2>
