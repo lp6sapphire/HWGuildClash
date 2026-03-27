@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Оптимизатор схватки гильдий</title>
+<style>
+:root{--bg:#fff;--bg2:#f5f5f0;--tx:#1a1a1a;--tx2:#666;--tx3:#999;--bd:#ddd;--win:#0F6E56;--winbg:rgba(29,158,117,.1);--lose:#A32D2D;--losebg:rgba(226,75,74,.08);--warn:#854F0B;--warnbg:rgba(186,117,23,.12);--mono:Consolas,monospace}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a1a;--bg2:#252525;--tx:#e0e0e0;--tx2:#aaa;--tx3:#777;--bd:#444}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;color:var(--tx);background:var(--bg);padding:12px;max-width:940px;margin:0 auto;font-size:13px}
+h2{font-size:15px;font-weight:600;margin:14px 0 6px}
+h3{font-size:13px;font-weight:500;margin:6px 0 4px;color:var(--tx2)}
+.tabs{display:flex;border-bottom:1px solid var(--bd);margin-bottom:10px;flex-wrap:wrap}
+.tab{padding:6px 12px;font-size:12px;cursor:pointer;border:none;background:none;color:var(--tx2);border-bottom:2px solid transparent;font-family:inherit}
+.tab.on{color:var(--tx);font-weight:600;border-bottom-color:var(--win)}
+.rtab{padding:6px 12px;font-size:12px;cursor:pointer;border:none;background:none;color:var(--tx2);border-bottom:2px solid transparent;font-family:inherit}
+.rtab.on{color:var(--tx);font-weight:600;border-bottom-color:#6C5CE7}
+.card{background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px}
+.metrics{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.metric{flex:1;min-width:70px;background:var(--bg2);border-radius:8px;padding:6px;text-align:center}
+.metric small{font-size:10px;color:var(--tx2);display:block}
+.metric b{font-size:16px;font-weight:500;display:block}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{font-size:10px;color:var(--tx3);font-weight:400;padding:3px 4px;border-bottom:1px solid var(--bd)}
+td{padding:2px 3px;border-bottom:1px solid var(--bd)}
+input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);border-radius:4px;background:var(--bg);color:var(--tx);font-family:inherit;width:100%}
+.num{font-size:11px;padding:3px 5px;border:1px solid var(--bd);border-radius:4px;background:var(--bg);color:var(--tx);font-family:inherit;width:100%;text-align:right}
+.btn{padding:4px 10px;font-size:11px;border:1px solid var(--bd);border-radius:5px;cursor:pointer;background:var(--bg);color:var(--tx);font-family:inherit}
+.btn:hover{background:var(--bg2)}.btn-p{background:var(--win);color:#fff;border-color:var(--win);font-weight:500}
+.btn-d{color:var(--lose);border-color:var(--lose)}
+.ogrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.ogrid table{width:100%;border-collapse:collapse}
+.ogr{display:grid;grid-template-columns:18px 70px 52px 52px 58px 16px;gap:1px;align-items:center}
+.ogr td{padding:1px 2px;border-bottom:1px solid var(--bd)}
+.ogr input[type=text]{font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%}
+.onum-i{font-size:10px;padding:2px 3px;text-align:right;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%;font-variant-numeric:tabular-nums}
+.egr{display:grid;grid-template-columns:22px 1fr 70px 22px;gap:1px;align-items:center}
+.bgr{display:grid;grid-template-columns:62px 62px 70px;gap:1px;align-items:center;margin-top:4px}
+.lhdr{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;margin-bottom:4px;flex-wrap:wrap}
+.lhdr.w{background:var(--winbg)}.lhdr.l{background:var(--losebg)}
+.fw{color:var(--win);font-weight:500}.fl{color:var(--lose);font-weight:500}
+.cbox{font-family:var(--mono);font-size:10px;padding:6px;background:var(--bg2);border-radius:6px;margin-top:6px;white-space:pre-wrap;user-select:all}
+.tag{display:inline-block;padding:1px 5px;border-radius:3px;margin:1px;font-size:11px;background:var(--bg)}
+.hidden{display:none}
+#fileInput{display:none}
+</style>
+</head>
+<body>
+
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+  <b style="font-size:16px">⚔️ Оптимизатор схватки</b>
+  <span style="flex:1"></span>
+  <button class="btn" onclick="doExport()">💾 Экспорт</button>
+  <button class="btn" onclick="document.getElementById('fileInput').click()">📂 Импорт</button>
+  <input type="file" id="fileInput" accept=".json" onchange="doImport(event)">
+</div>
+
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+  <h2 style="margin:0">Наша команда</h2>
+  <span style="flex:1"></span>
+  <button class="btn" style="font-size:10px" onclick="clearOurPower()">🗑 Очистить мощности</button>
+</div>
+<div class="ogrid" id="ourGrid"></div>
+<button class="btn" style="margin-top:4px" onclick="addOur()">+ Игрок</button>
+<div style="font-size:10px;color:var(--tx3);margin-top:2px">Атака+Защита=Тотал (авто). Сортировка автоматически.</div>
+
+<h2 style="margin-top:14px">Раунды (5 врагов)</h2>
+<div class="tabs" id="rTabs"></div>
+<div id="rContent"></div>
+
+<script>
+const LN=["ВЛ","СЛ","НЛ"],RISK=0.05,NR=5;
+let ourData=[], rounds=[];
+for(let i=0;i<NR;i++) rounds.push({mode:i===0?"blind":"detailed",enemy:[[],[],[]],bT:["","",""],bC:["10","10","10"],bA:["","",""],bD:["","",""],result:null});
+let aR=0;
+
+const D_OUR=[
+  {n:"sadistic",a:0,d:0,t:92180},{n:"cypoba",a:174000,d:96000,t:270000},
+  {n:"Johns0n",a:0,d:0,t:280894},{n:"par4dox",a:170000,d:112000,t:282000},
+  {n:"zzz",a:0,d:0,t:282053},{n:"zigi",a:0,d:0,t:288141},
+  {n:"staje",a:0,d:0,t:302554},{n:"yuzik",a:240000,d:71000,t:311000},
+  {n:"m4thelix",a:0,d:0,t:329951},{n:"napalm",a:0,d:0,t:345694},
+  {n:"sheever",a:239000,d:141000,t:380000},{n:"ghostly",a:183000,d:220000,t:403000},
+  {n:"gatito",a:0,d:0,t:471519},{n:"dlzhnik",a:0,d:0,t:472578},
+  {n:"raggen",a:0,d:0,t:480842},{n:"sapphire",a:248000,d:245000,t:493000},
+  {n:"psi",a:268000,d:253000,t:521000},{n:"toto",a:0,d:0,t:594421},
+  {n:"rhio",a:393000,d:282000,t:675000},{n:"steelgopher",a:0,d:0,t:724157},
+  {n:"maljo",a:0,d:0,t:774841},{n:"overlord",a:400000,d:465000,t:865000},
+  {n:"ghillie",a:0,d:0,t:1118140},{n:"odi",a:594000,d:540000,t:1134000}
+];
+ourData=D_OUR.map(p=>({name:p.n,atk:p.a,def:p.d,total:p.t}));
+
+// ═══════ HELPERS ═══════
+function zf(el){if(el.value==='0')el.value='';}
+function zb(el){if(el.value==='')el.value='0';}
+function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
+function clearOurPower(){ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});renderOur();}
+
+// ═══════ OUR TEAM ═══════
+function renderOur(){
+  const g=document.getElementById("ourGrid");
+  const half=Math.ceil(ourData.length/2);
+  const mkTable=(start,end)=>{
+    let h=`<table><thead><tr class="ogr"><th>#</th><th>Имя</th><th style="text-align:right">Атк</th><th style="text-align:right">Защ</th><th style="text-align:right">Тотал</th><th></th></tr></thead><tbody>`;
+    for(let i=start;i<end&&i<ourData.length;i++){
+      const p=ourData[i];
+      h+=`<tr class="ogr">
+        <td style="color:var(--tx3);font-size:9px">${i+1}</td>
+        <td><input type="text" value="${p.name}" onchange="ourData[${i}].name=this.value"></td>
+        <td><input class="onum-i" value="${p.atk||0}" onfocus="zf(this)" onblur="zb(this)" onchange="uOur(${i},'atk',this.value)"></td>
+        <td><input class="onum-i" value="${p.def||0}" onfocus="zf(this)" onblur="zb(this)" onchange="uOur(${i},'def',this.value)"></td>
+        <td><input class="onum-i" value="${p.total}" onfocus="zf(this)" onblur="zb(this)" onchange="uOur(${i},'total',this.value)" style="font-weight:600"></td>
+        <td><button class="btn btn-d" style="padding:0 3px;font-size:8px" onclick="ourData.splice(${i},1);renderOur()">×</button></td>
+      </tr>`;
+    }
+    h+=`</tbody></table>`;
+    return h;
+  };
+  g.innerHTML=mkTable(0,half)+mkTable(half,ourData.length);
+}
+function uOur(i,f,v){v=parseInt(v)||0;ourData[i][f]=v;if(f!=="total")ourData[i].total=(ourData[i].atk||0)+(ourData[i].def||0);sortOur();renderOur();}
+function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();}
+
+// ═══════ ROUND TABS ═══════
+function renderRTabs(){
+  document.getElementById("rTabs").innerHTML=Array.from({length:NR},(_,i)=>
+    `<button class="rtab${i===aR?' on':''}" onclick="aR=${i};renderRTabs();renderRC()">Р${i+1}${rounds[i].mode==='blind'?' 👁':''}</button>`
+  ).join("");
+}
+
+function renderRC(){
+  const c=document.getElementById("rContent"),rd=rounds[aR];let h="";
+  h+=`<div style="margin-bottom:8px"><label style="font-size:11px;cursor:pointer"><input type="checkbox" ${rd.mode==="blind"?"checked":""} onchange="rounds[${aR}].mode=this.checked?'blind':'detailed';renderRTabs();renderRC()"> Слепой режим</label></div>`;
+
+  if(rd.mode==="blind"){
+    h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
+    for(let l=0;l<3;l++){
+      h+=`<div class="card"><b style="font-size:12px">${LN[l]}</b>
+        <div class="bgr"><div style="font-size:10px;color:var(--tx2)">Атака</div><div style="font-size:10px;color:var(--tx2)">Защита</div><div style="font-size:10px;color:var(--tx2)">Тотал</div></div>
+        <div class="bgr">
+          <input class="num" value="${rd.bA[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bA[${l}]=this.value;updBlindTotal(${aR},${l})">
+          <input class="num" value="${rd.bD[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bD[${l}]=this.value;updBlindTotal(${aR},${l})">
+          <input class="num" id="bT_${aR}_${l}" value="${rd.bT[l]}" onfocus="zf(this)" onchange="rounds[${aR}].bT[${l}]=this.value" style="font-weight:600">
+        </div>
+        <div style="font-size:10px;color:var(--tx2);margin-top:4px">Игроков</div>
+        <input class="num" value="${rd.bC[l]}" onfocus="zf(this)" onblur="zb(this)" onchange="rounds[${aR}].bC[${l}]=this.value" style="width:60px">
+      </div>`;
+    }
+    h+=`</div>`;
+  } else {
+    h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
+    for(let l=0;l<3;l++){
+      h+=`<div><div style="display:flex;align-items:center;gap:4px;margin-bottom:2px"><b style="font-size:12px">${LN[l]}</b><span style="flex:1"></span><button class="btn" style="font-size:9px;padding:1px 5px" onclick="clearEnemyLane(${aR},${l})">🗑</button></div>
+      <table><thead><tr class="egr"><th>#</th><th>Имя</th><th style="text-align:right">Мощность</th><th></th></tr></thead>
+      <tbody id="eB_${aR}_${l}"></tbody></table>
+      <button class="btn" style="margin-top:2px;font-size:10px" onclick="addE(${aR},${l})">+</button></div>`;
+    }
+    h+=`</div>`;
+  }
+
+  h+=`<button class="btn btn-p" style="padding:8px 20px;width:100%;margin-bottom:8px" onclick="calc(${aR})" id="cBtn_${aR}">Рассчитать раунд ${aR+1}</button>`;
+  h+=`<div id="rRes_${aR}"></div>`;
+  c.innerHTML=h;
+
+  if(rd.mode==="detailed") for(let l=0;l<3;l++) renderEB(aR,l);
+  if(rd.result) showRes(aR);
+}
+
+function updBlindTotal(ri,l){
+  const a=parseInt(rounds[ri].bA[l])||0, d=parseInt(rounds[ri].bD[l])||0;
+  if(a||d){rounds[ri].bT[l]=String(a+d);const el=document.getElementById(`bT_${ri}_${l}`);if(el)el.value=rounds[ri].bT[l];}
+}
+
+function renderEB(ri,l){
+  const b=document.getElementById(`eB_${ri}_${l}`);if(!b)return;b.innerHTML="";
+  rounds[ri].enemy[l].forEach((p,i)=>{const tr=document.createElement("tr");tr.className="egr";
+    tr.innerHTML=`<td style="color:var(--tx3);font-size:10px">${i+1}</td>
+      <td><input type="text" value="${p.name}" onchange="rounds[${ri}].enemy[${l}][${i}].name=this.value"></td>
+      <td><input class="num" value="${p.power}" onfocus="zf(this)" onblur="zb(this)" onchange="uEnemy(${ri},${l},${i},this.value)"></td>
+      <td><button class="btn btn-d" style="padding:0 3px;font-size:9px" onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l})">×</button></td>`;
+    b.appendChild(tr);
+  });
+}
+function uEnemy(ri,l,i,v){rounds[ri].enemy[l][i].power=parseInt(v)||0;rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);renderEB(ri,l);}
+function addE(ri,l){rounds[ri].enemy[l].push({name:"",power:0});renderEB(ri,l);}
+function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
+
+// ═══════ CORE: SIMULATION (gorka) ═══════
+function simDetail(team,enemy){
+  const our=[...team].sort((a,b)=>a.power-b.power),es=[...enemy].sort((a,b)=>a.power-b.power);
+  let oi=0,ei=0,of2=0,ef=0,ow=0,ew=0,last=null;
+  const fights=[];let minMW=Infinity,risky=0;
+  while(oi<our.length&&ei<es.length){
+    of2++;ef++;
+    const margin=our[oi].power-es[ei].power,pct=Math.abs(margin)/Math.max(our[oi].power,es[ei].power);
+    if(our[oi].power>es[ei].power){
+      ow++;last="us";if(margin<minMW)minMW=margin;if(pct<RISK)risky++;
+      fights.push({our:our[oi],enemy:es[ei],winner:"us",margin,pct});
+      ei++;ef=0;if(of2>=2){oi++;of2=0;}
+    }else{
+      ew++;last="them";
+      fights.push({our:our[oi],enemy:es[ei],winner:"them",margin,pct});
+      oi++;of2=0;if(ef>=2){ei++;ef=0;}
+    }
+  }
+  while(oi<our.length){of2++;ow++;last="us";fights.push({our:our[oi],enemy:null,winner:"us",margin:0,pct:0});if(of2>=2){oi++;of2=0;}}
+  while(ei<es.length){ef++;ew++;last="them";fights.push({our:null,enemy:es[ei],winner:"them",margin:0,pct:0});if(ef>=2){ei++;ef=0;}}
+  return{won:last==="us",ow,ew,fights,minMW,risky};
+}
+function evaluate(lanes,enemies){let flags=0,wins=0,risk=0,details=[];for(let i=0;i<3;i++){const r=simDetail(lanes[i],enemies[i]);if(r.won)flags++;wins+=r.ow;risk+=r.risky;details.push(r);}return{flags,wins,risk,details};}
+function calcProb(d){if(!d.won)return 0;let p=1;for(const f of d.fights){if(!f.our||!f.enemy)continue;if(f.winner==="us"&&f.pct<RISK)p*=.5+(f.pct/RISK)*.5;}return p;}
+function isBetter(f,w,r,bf,bw,br){return f>bf||(f===bf&&w>bw)||(f===bf&&w===bw&&r<br);}
+
+// ═══════ CORE: OPTIMIZER ═══════
+function optimizeCore(pool,enemies){
+  const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
+  let bF=0,bW=0,bR=999,bL=null,bD=null;
+  const tryC=lanes=>{const r=evaluate(lanes,enemies);if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;bL=lanes.map(l=>[...l]);bD=r.details;}};
+
+  // Phase 1: 6 heuristic strategies × all distributions × 3 sacrifice lanes
+  for(let sac=0;sac<3;sac++){
+    const wl=[0,1,2].filter(i=>i!==sac);
+    for(let ns=Math.max(4,n-20);ns<Math.min(n-10,11);ns++){
+      const nr=n-ns;
+      for(let n1=Math.max(5,nr-10);n1<=Math.min(10,nr-5);n1++){
+        const n2=nr-n1;if(n2<5||n2>10)continue;
+        const sacT=asc.slice(0,ns),rem=desc.slice(0,n-ns);
+        const mk=fn=>{let a=[],b=[];fn(rem,a,b,n1,n2);return[a,b];};
+        const splits=[
+          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===1?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+          [rem.slice(0,n1),rem.slice(n1)],
+          [rem.slice(n2),rem.slice(0,n2)],
+          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)((i>>1)%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+          mk((r,a,b,na,nb)=>{const e1=[...enemies[wl[0]]].sort((x,y)=>x.power-y.power),e2=[...enemies[wl[1]]].sort((x,y)=>x.power-y.power);r.forEach(p=>{if(a.length>=na)b.push(p);else if(b.length>=nb)a.push(p);else{const b1=e1.filter(e=>p.power>e.power).length,b2=e2.filter(e=>p.power>e.power).length;(b1>=b2?a:b).push(p);}});})
+        ];
+        for(const[g1,g2]of splits){
+          let la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g1];la[wl[1]]=[...g2];tryC(la);
+          la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g2];la[wl[1]]=[...g1];tryC(la);
+        }
+      }
+    }
+  }
+  if(!bL)return null;
+
+  // Phase 2: 1-on-1 swap optimization (up to 10 rounds)
+  const lanes=bL.map(l=>[...l]);
+  for(let round=0;round<10;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
+        [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
+        const r=evaluate(lanes,enemies);
+        if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;bD=r.details;imp=true;}
+        else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
+      }
+    if(!imp)break;
+  }
+
+  // Phase 3: 2-on-2 swap optimization (up to 3 rounds)
+  for(let round=0;round<3;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
+        for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
+          [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
+          [lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];
+          const r=evaluate(lanes,enemies);
+          if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;bD=r.details;imp=true;}
+          else{[lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];[lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];}
+        }
+    if(!imp)break;
+  }
+  const fin=evaluate(lanes,enemies);
+  return{flags:fin.flags,wins:fin.wins,risk:fin.risk,lanes:lanes.map(l=>[...l]),details:fin.details};
+}
+
+// ═══════ ROBUSTNESS ═══════
+function calcRobust(lanes,enemies){
+  const all=[...enemies[0],...enemies[1],...enemies[2]].sort((a,b)=>b.power-a.power);
+  const eG=[all.slice(0,10),all.slice(10,20),all.slice(20)];
+  const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],gn=["ТОП","СЕР","СЛБ"];
+  return perms.map(p=>{const el=[eG[p[0]],eG[p[1]],eG[p[2]]];const r=evaluate(lanes,el);return{label:`${gn[p[0]]}→${gn[p[1]]}→${gn[p[2]]}`,...r};});
+}
+
+// ═══════ GRANULAR ═══════
+function calcGranular(lanes,enemies){
+  const all=[...enemies[0],...enemies[1],...enemies[2]].sort((a,b)=>b.power-a.power);
+  const top5=all.slice(0,5),res=[];
+  for(const pl of top5){
+    const oL=enemies.findIndex(l=>l.some(p=>p.name===pl.name));if(oL<0)continue;
+    for(let tgt=0;tgt<3;tgt++){
+      if(tgt===oL)continue;
+      const ne=enemies.map(l=>[...l]);
+      const wI=ne[tgt].reduce((mi,p,i,a)=>p.power<a[mi].power?i:mi,0);
+      const sw=ne[tgt][wI];
+      ne[oL]=ne[oL].filter(p=>p.name!==pl.name);ne[oL].push(sw);ne[tgt][wI]=pl;
+      const r=evaluate(lanes,ne);
+      res.push({label:`${pl.name}(${Math.round(pl.power/1000)}K) ${LN[oL]}→${LN[tgt]}`,swap:`↔${sw.name}(${Math.round(sw.power/1000)}K)`,...r});
+    }
+  }
+  return res;
+}
+
+// ═══════ BLIND ═══════
+function genEst(total,count,label){
+  const ws=[];for(let i=0;i<count;i++)ws.push(.5+i/(count-1));const wS=ws.reduce((a,b)=>a+b,0);
+  return ws.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/wS)}));
+}
+function genScen(total,count,label){
+  const avg=total/count,sc=[];
+  sc.push({name:"равном.",players:Array.from({length:count},(_,i)=>({name:`${label}_${i+1}`,power:Math.round(avg)}))});
+  const lw=[];for(let i=0;i<count;i++)lw.push(.5+i/(count-1));const lwS=lw.reduce((a,b)=>a+b,0);
+  sc.push({name:"линейн.",players:lw.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/lwS)}))});
+  const tp=avg*1.8,rp=(total-tp)/(count-1),th=[];for(let i=0;i<count-1;i++)th.push({name:`${label}_${i+1}`,power:Math.round(rp)});th.push({name:`${label}_boss`,power:Math.round(tp)});
+  sc.push({name:"1сильн.",players:th});
+  const t1=avg*1.6,t2=avg*1.4,rp2=(total-t1-t2)/(count-2),ts=[];for(let i=0;i<count-2;i++)ts.push({name:`${label}_${i+1}`,power:Math.round(rp2)});ts.push({name:`${label}_sub`,power:Math.round(t2)});ts.push({name:`${label}_boss`,power:Math.round(t1)});
+  sc.push({name:"2сильн.",players:ts});
+  return sc;
+}
+
+// ═══════ CALCULATE ═══════
+function calc(ri){
+  const rd=rounds[ri],pool=ourData.filter(p=>p.total>0).map(p=>({name:p.name,power:p.total}));
+  if(pool.length<12){alert("Минимум 12 игроков");return;}
+  const btn=document.getElementById(`cBtn_${ri}`);btn.textContent="Считаю...";btn.disabled=true;
+  setTimeout(()=>{
+    try{
+      let res;
+      if(rd.mode==="blind"){
+        const totals=rd.bT.map(t=>parseInt(t)||0),counts=rd.bC.map(c=>parseInt(c)||10);
+        if(totals.some(t=>t===0)){alert("Введи тотал линий");btn.textContent="Рассчитать";btn.disabled=false;return;}
+        const primaryE=totals.map((t,i)=>genEst(t,counts[i],LN[i]));
+        res=optimizeCore(pool,primaryE);
+        if(!res){alert("Не найдено");btn.textContent="Рассчитать";btn.disabled=false;return;}
+        const sp=totals.map((t,i)=>genScen(t,counts[i],LN[i]));
+        const br=[];
+        for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){
+          const r=evaluate(res.lanes,[s0.players,s1.players,s2.players]);
+          br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
+        }
+        res.blindRes=br;res.enemies=primaryE;res.minFlags=Math.min(...br.map(r=>r.flags));
+      }else{
+        const enemies=rd.enemy.map(l=>l.filter(p=>p.power>0));
+        if(enemies.some(e=>e.length<1)){alert("Заполни все линии");btn.textContent="Рассчитать";btn.disabled=false;return;}
+        res=optimizeCore(pool,enemies);
+        if(!res){alert("Не найдено");btn.textContent="Рассчитать";btn.disabled=false;return;}
+        res.robust=calcRobust(res.lanes,enemies);
+        res.granular=calcGranular(res.lanes,enemies);
+        res.enemies=enemies;
+      }
+      res.lP=res.details.map(d=>calcProb(d));
+      res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
+      res._m=rd.mode;rd.result=res;showRes(ri);
+    }catch(e){alert("Ошибка: "+e.message);console.error(e);}
+    btn.textContent=`Рассчитать раунд ${ri+1}`;btn.disabled=false;
+  },50);
+}
+
+// ═══════ RENDER RESULT ═══════
+function showRes(ri){
+  const res=rounds[ri].result;if(!res)return;
+  const c=document.getElementById(`rRes_${ri}`);if(!c)return;
+  const isD=res._m==="detailed";
+  const items=[{l:"Расклад",v:res.lanes.map(l=>l.length).join("–")},{l:"Флаги",v:`${res.flags}/3`,c:res.flags>=2?"var(--win)":"var(--warn)"},{l:"Побед",v:res.wins},{l:"Надёжность",v:Math.round(res.oP*100)+"%",c:res.oP>.9?"var(--win)":res.oP>.7?"var(--warn)":"var(--lose)"}];
+  if(!isD)items.push({l:"Мин.фл",v:res.minFlags,c:res.minFlags>=2?"var(--win)":"var(--warn)"});
+  let h=`<div class="metrics">${items.map(i=>`<div class="metric"><small>${i.l}</small><b${i.c?' style="color:'+i.c+'"':''}>${i.v}</b></div>`).join("")}</div>`;
+  const tabs=isD?["Бои","Робастность","Точ.свапы","Составы"]:["Бои","Сценарии","Составы"];
+  h+=`<div class="tabs" id="st_${ri}">${tabs.map((t,i)=>`<button class="tab${i===0?' on':''}" onclick="showSub(${ri},${i})">${t}</button>`).join("")}</div><div id="sc_${ri}"></div>`;
+  c.innerHTML=h;showSub(ri,0);
+}
+function showSub(ri,idx){
+  document.querySelectorAll(`#st_${ri} .tab`).forEach((t,i)=>t.classList.toggle("on",i===idx));
+  const c=document.getElementById(`sc_${ri}`),res=rounds[ri].result,isD=res._m==="detailed";
+  const names=isD?["fights","robust","granular","lineups"]:["fights","scenarios","lineups"];
+  const id=names[idx];
+  if(id==="fights")c.innerHTML=hFights(res);
+  else if(id==="robust")c.innerHTML=hTable(res.robust,"Враг перетасовывает блоками:");
+  else if(id==="granular")c.innerHTML=hTable(res.granular,"Точечные переброски ТОП-5:");
+  else if(id==="scenarios")c.innerHTML=hTable(res.blindRes,"64 сценария:");
+  else if(id==="lineups")c.innerHTML=hLineups(res);
+}
+
+// ═══════ HTML HELPERS ═══════
+function hFights(res){
+  let h="";
+  for(let lane=0;lane<3;lane++){
+    const d=res.details[lane],team=res.lanes[lane],enemy=res.enemies[lane];
+    const oT=team.reduce((s,p)=>s+p.power,0),eT=enemy.reduce((s,p)=>s+p.power,0),diff=oT-eT;
+    h+=`<div style="margin-bottom:16px"><div class="lhdr ${d.won?'w':'l'}">
+      <span style="font-size:14px;font-weight:500;color:var(--${d.won?'win':'lose'})">${d.won?'🏴':'❌'} ${LN[lane]} (${team.length}vs${enemy.length})</span>
+      <span style="font-size:13px;font-weight:500;color:var(--${d.won?'win':'lose'})">${d.ow}:${d.ew}</span>`;
+    if(d.won&&d.risky>0)h+=`<span style="font-size:10px;color:var(--warn);background:var(--warnbg);padding:1px 5px;border-radius:4px">⚡${d.risky}</span>`;
+    if(d.won)h+=`<span style="font-size:10px;color:var(--tx2);margin-left:auto">${Math.round(res.lP[lane]*100)}%</span>`;
+    h+=`</div><div style="font-size:10px;color:var(--tx2);margin-bottom:3px">Тотал: ${oT.toLocaleString()} vs ${eT.toLocaleString()} (${diff>0?'+':''}${diff.toLocaleString()}, ${diff>0?'+':''}${Math.round(diff/eT*100)}%)</div>`;
+    h+=`<table><thead><tr><th style="width:20px;text-align:right">#</th><th style="text-align:right">Наш</th><th style="text-align:center;width:22px">vs</th><th>Враг</th><th style="width:105px">Итог</th></tr></thead><tbody>`;
+    d.fights.forEach((f,i)=>{
+      const last=i===d.fights.length-1,w=f.winner==="us",auto=!f.our||!f.enemy,close=!auto&&f.pct<RISK;
+      const bg=last?"var(--warnbg)":(close?(w?"rgba(250,238,218,.3)":"rgba(252,235,235,.3)"):"");
+      h+=`<tr${bg?` style="background:${bg}"`:''}>`;
+      h+=`<td style="color:var(--tx3);text-align:right">${i+1}</td>`;
+      h+=`<td style="text-align:right">${f.our?f.our.name+' ('+Math.round(f.our.power/1000)+'K)':''}</td>`;
+      h+=`<td style="text-align:center;color:var(--tx3)">vs</td>`;
+      h+=`<td${auto?' style="font-style:italic;color:var(--tx3)"':''}>${f.enemy?f.enemy.name+' ('+Math.round(f.enemy.power/1000)+'K)':'— нет —'}</td>`;
+      h+=`<td class="${w?'fw':'fl'}">${auto?'AUTO':(w?'WIN':'LOSE')}`;
+      if(close&&!auto)h+=`<span style="font-size:9px;color:var(--warn);margin-left:2px">⚡${w?'+':'-'}${Math.round(Math.abs(f.margin)/1000)}K(${(f.pct*100).toFixed(1)}%)</span>`;
+      if(last)h+=`<span style="font-size:9px;color:var(--warn);font-weight:600;margin-left:2px">ФЛАГ</span>`;
+      h+=`</td></tr>`;
+    });
+    h+=`</tbody></table></div>`;
+  }
+  return h;
+}
+function hTable(data,label){
+  if(!data||!data.length)return`<div style="color:var(--tx2)">Нет данных</div>`;
+  const sorted=[...data].sort((a,b)=>a.flags-b.flags||a.wins-b.wins);
+  let h=`<div style="font-size:12px;color:var(--tx2);margin-bottom:6px">${label}</div><table><thead><tr><th>Сценарий</th><th style="text-align:center">Фл</th><th style="text-align:center">Побед</th><th style="text-align:center">ВЛ</th><th style="text-align:center">СЛ</th><th style="text-align:center">НЛ</th><th>Итог</th></tr></thead><tbody>`;
+  for(const r of sorted){
+    const bg=r.flags<2?"var(--losebg)":"";
+    h+=`<tr${bg?` style="background:${bg}"`:''}>`;
+    h+=`<td style="font-size:10px">${r.label}${r.swap?` <span style="color:var(--tx3)">${r.swap}</span>`:''}</td>`;
+    h+=`<td style="text-align:center;font-weight:500">${r.flags}</td><td style="text-align:center">${r.wins}</td>`;
+    for(let l=0;l<3;l++)h+=`<td style="text-align:center;color:var(--${r.details[l].won?'win':'lose'});font-weight:500;font-size:10px">${r.details[l].won?'🏴':'❌'}${r.details[l].ow}:${r.details[l].ew}</td>`;
+    h+=`<td style="font-weight:500;font-size:10px;color:var(--${r.flags>=2?'win':r.flags===1?'warn':'lose'})">${r.flags>=2?'✅':r.flags===1?'🤝':'❌'}</td></tr>`;
+  }
+  h+=`</tbody></table>`;
+  const w=data.filter(r=>r.flags>=2).length,d2=data.filter(r=>r.flags===1).length,lo=data.filter(r=>r.flags===0).length;
+  h+=`<div style="font-size:10px;color:var(--tx2);margin-top:4px">✅${w} 🤝${d2} ❌${lo} из ${data.length}</div>`;
+  return h;
+}
+function hLineups(res){
+  let h="";
+  for(let i=0;i<3;i++){
+    const team=[...res.lanes[i]].sort((a,b)=>a.power-b.power),won=res.details[i].won;
+    h+=`<div class="card"><div style="font-weight:500;margin-bottom:3px;color:var(--${won?'win':'lose'});font-size:12px">${won?'🏴':'❌'} ${LN[i]} (${team.length})</div>`;
+    h+=`<div style="line-height:1.7">${team.map(p=>`<span class="tag">${p.name} <span style="color:var(--tx3)">${Math.round(p.power/1000)}K</span></span>`).join("")}</div></div>`;
+  }
+  h+=`<div class="cbox">${[0,1,2].map(i=>{const t=[...res.lanes[i]].sort((a,b)=>a.power-b.power);return`${LN[i]}: ${t.map(p=>p.name).join(", ")}`;}).join("\n")}</div>`;
+  return h;
+}
+
+// ═══════ EXPORT / IMPORT ═══════
+function doExport(){
+  const data={ourData,rounds:rounds.map(r=>({mode:r.mode,enemy:r.enemy,bT:r.bT,bC:r.bC,bA:r.bA,bD:r.bD}))};
+  const a=document.createElement("a");
+  a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(data,null,2));
+  a.download="guild_"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function doImport(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(d.ourData){ourData=d.ourData;renderOur();}
+      if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR){Object.assign(rounds[i],{mode:r.mode||"detailed",enemy:r.enemy||[[],[],[]],bT:r.bT||["","",""],bC:r.bC||["10","10","10"],bA:r.bA||["","",""],bD:r.bD||["","",""],result:null});}});
+      renderRTabs();renderRC();alert("Загружено!");
+    }catch(err){alert("Ошибка: "+err.message);}
+  };
+  reader.readAsText(file);e.target.value="";
+}
+
+// ═══════ INIT ═══════
+sortOur();renderOur();renderRTabs();renderRC();
+</script>
+</body>
+</html>
