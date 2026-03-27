@@ -816,14 +816,79 @@ function doImport(e){
         eA:r.eA||["","",""],eD:r.eD||["","",""],
         result:null,resultIns:null,viewMode:"normal"
       });}});
-      renderRTabs();renderRC();alert("Loaded!");
+      saveLS();renderRTabs();renderRC();alert("Loaded!");
     }catch(err){alert("Error: "+err.message);}
   };
   reader.readAsText(file);e.target.value="";
 }
 
+// ═══════ LOCALSTORAGE AUTO-SAVE ═══════
+const LS_KEY="gco_v1";
+function saveLS(){
+  try{
+    const data={ourData,rounds:rounds.map(r=>({
+      mode:r.mode,enemy:r.enemy,
+      bT:r.bT,bC:r.bC,bA:r.bA,bD:r.bD,eA:r.eA,eD:r.eD
+    }))};
+    localStorage.setItem(LS_KEY,JSON.stringify(data));
+  }catch(e){}
+}
+function loadLS(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);if(!raw)return false;
+    const d=JSON.parse(raw);
+    if(d.ourData)ourData=d.ourData;
+    if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR)Object.assign(rounds[i],{
+      mode:r.mode||"detailed",
+      enemy:r.enemy||[[],[],[]],
+      bT:r.bT||["","",""],bC:r.bC||["10","10","10"],
+      bA:r.bA||["","",""],bD:r.bD||["","",""],
+      eA:r.eA||["","",""],eD:r.eD||["","",""],
+      result:null,resultIns:null,viewMode:"normal"
+    });});
+    return true;
+  }catch(e){return false;}
+}
+// Patch all mutating functions to auto-save
+const _origUOur=uOur;
+function uOur(i,f,v){_origUOur(i,f,v);saveLS();}
+const _origAddOur=addOur;
+function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();saveLS();}
+const _origSortOur=sortOur;
+// sortOur is called via button — save in renderOur wrapper
+const _origRenderOur=renderOur;
+// wrap renderOur so every name edit also saves
+function _wrapNameSave(i,v){ourData[i].name=v;saveLS();}
+// patch addE, clearEnemyLane, uEnemy, sortEnemy to auto-save
+const _origAddE=addE;
+function addE(ri,l){rounds[ri].enemy[l].push({name:"",power:0});renderEB(ri,l);saveLS();}
+const _origClearLane=clearEnemyLane;
+function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);saveLS();}
+const _origUEnemy=uEnemy;
+function uEnemy(ri,l,i,v){rounds[ri].enemy[l][i].power=parseInt(v)||0;updEnemyTotal(ri,l);saveLS();}
+const _origSortEnemy=sortEnemy;
+function sortEnemy(ri,l){rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);renderEB(ri,l);saveLS();}
+// Save when round mode or blind inputs change — patch renderRC inline onchange calls
+// by saving after every rounds property write in renderRC rendering
+// Instead: intercept at the round data mutation points via a proxy-style debounce
+let _saveTimer=null;
+function debounceSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveLS,400);}
+// Observe rounds field mutations via event delegation
+document.addEventListener("change",e=>{
+  if(e.target.closest("#rContent"))debounceSave();
+});
+
 // ═══════ INIT ═══════
+const _loaded=loadLS();
 sortOur();renderOur();renderRTabs();renderRC();
+// Show subtle indicator if data was restored
+if(_loaded){
+  const ind=document.createElement("div");
+  ind.style.cssText="position:fixed;bottom:12px;right:12px;background:var(--winbg);color:var(--win);font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--win);z-index:99;pointer-events:none";
+  ind.textContent="✓ Data restored";
+  document.body.appendChild(ind);
+  setTimeout(()=>ind.remove(),2500);
+}
 </script>
 </body>
 </html>
