@@ -62,7 +62,7 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
   <h2 style="margin:0">Our Team</h2>
   <span style="flex:1"></span>
   <button class="btn" onclick="addOur()">+ Player</button>
-  <button class="btn" onclick="sortOur();renderOur()">↕ Sort</button>
+  <button class="btn" onclick="sortOur();renderOur();saveLS()">↕ Sort</button>
   <button class="btn" style="font-size:10px" onclick="clearOurPower()">🗑 Clear power</button>
 </div>
 <div class="ogrid" id="ourGrid"></div>
@@ -93,7 +93,7 @@ let aR=0;
 function zf(el){if(el.value==='0')el.value='';}
 function zb(el){if(el.value==='')el.value='0';}
 function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
-function clearOurPower(){ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});renderOur();}
+function clearOurPower(){ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});renderOur();saveLS();}
 
 // ═══════ OUR TEAM — 3 tables × 10 rows ═══════
 function renderOur(){
@@ -115,7 +115,7 @@ function renderOur(){
       const defPct=p.total>0&&p.def>0?Math.round(p.def/p.total*100):0;
       h+=`<tr>
         <td style="color:var(--tx3);font-size:9px;text-align:right">${i+1}</td>
-        <td><input type="text" value="${p.name}" onchange="ourData[${i}].name=this.value" style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
+        <td><input type="text" value="${p.name}" onchange="ourData[${i}].name=this.value;saveLS()" style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
         <td>
           <div style="display:flex;align-items:center;gap:1px">
             <input class="onum-i" id="our_${i}_atk" value="${p.atk||0}"
@@ -169,13 +169,14 @@ function uOur(i,f,v){
   ourData[i][f]=v;
   if(f!=="total") ourData[i].total=(ourData[i].atk||0)+(ourData[i].def||0);
   renderOur();
+  saveLS();
   if(_pendingFocus){
     const el=document.getElementById(_pendingFocus);
     if(el){el.focus();el.select();}
     _pendingFocus=null;
   }
 }
-function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();}
+function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();saveLS();}
 
 // ═══════ ROUND TABS ═══════
 function renderRTabs(){
@@ -208,7 +209,7 @@ function renderRC(){
     h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
     for(let l=0;l<3;l++){
       const eTot=rounds[aR].enemy[l].reduce((s,p)=>s+(p.power||0),0);
-      h+=`<div class="card" style="padding:8px">
+      h+=`<div class="card" style="padding:8px" data-ri="${aR}" data-l="${l}">
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
           <b style="font-size:12px">${LN[l]}</b>
           <span style="flex:1"></span>
@@ -259,15 +260,21 @@ function updBlindTotal(ri,l){
   if(a||d){rounds[ri].bT[l]=String(a+d);const el=document.getElementById(`bT_${ri}_${l}`);if(el)el.value=rounds[ri].bT[l];}
 }
 
+// ═══════ DRAG-AND-DROP STATE ═══════
+let _drag=null; // {ri, fromLane, fromIdx, player}
+
 function renderEB(ri,l){
   const b=document.getElementById(`eB_${ri}_${l}`);if(!b)return;b.innerHTML="";
   rounds[ri].enemy[l].forEach((p,i)=>{
     const tr=document.createElement("tr");
+    tr.draggable=true;
+    tr.dataset.ri=ri;tr.dataset.l=l;tr.dataset.i=i;
+    tr.style.cursor="grab";
     tr.innerHTML=`
-      <td style="color:var(--tx3);font-size:9px;width:14px;text-align:right">${i+1}</td>
+      <td style="color:var(--tx3);font-size:9px;width:14px;text-align:right;user-select:none">⠿</td>
       <td style="padding:1px 2px"><input type="text" value="${p.name}"
         style="font-size:10px;padding:2px 4px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"
-        onchange="rounds[${ri}].enemy[${l}][${i}].name=this.value"></td>
+        onchange="rounds[${ri}].enemy[${l}][${i}].name=this.value;saveLS()"></td>
       <td style="padding:1px 2px;width:68px"><input class="num" id="ep_${ri}_${l}_${i}" value="${p.power}"
         style="font-size:10px;padding:2px 4px;width:100%"
         onfocus="zf(this)" onblur="zb(this)"
@@ -275,9 +282,45 @@ function renderEB(ri,l){
         onkeydown="enemyEnter(event,${ri},${l},${i})"></td>
       <td style="width:18px;padding:1px 1px"><button class="btn btn-d"
         style="padding:0 3px;font-size:9px;line-height:1.5"
-        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l})">×</button></td>`;
+        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l});saveLS()">×</button></td>`;
+    // drag events
+    tr.addEventListener("dragstart",e=>{
+      _drag={ri:+tr.dataset.ri,fromLane:+tr.dataset.l,fromIdx:+tr.dataset.i,
+             player:{...rounds[+tr.dataset.ri].enemy[+tr.dataset.l][+tr.dataset.i]}};
+      tr.style.opacity="0.4";
+      e.dataTransfer.effectAllowed="move";
+    });
+    tr.addEventListener("dragend",()=>{tr.style.opacity="";_drag=null;});
     b.appendChild(tr);
   });
+
+  // Make the whole card a drop zone (works even when lane is empty)
+  // Use a marker to avoid adding duplicate listeners on re-render
+  const card=b.closest(".card");
+  if(card&&!card._dropBound){
+    card._dropBound=true;
+    card.addEventListener("dragover",e=>{
+      if(!_drag||_drag.ri!==+card.dataset.ri||_drag.fromLane===+card.dataset.l)return;
+      e.preventDefault();e.dataTransfer.dropEffect="move";
+      card.style.outline="2px solid var(--win)";
+    });
+    card.addEventListener("dragleave",e=>{
+      if(!card.contains(e.relatedTarget))card.style.outline="";
+    });
+    card.addEventListener("drop",e=>{
+      e.preventDefault();
+      card.style.outline="";
+      const cri=+card.dataset.ri,cl=+card.dataset.l;
+      if(!_drag||_drag.ri!==cri||_drag.fromLane===cl)return;
+      const {fromLane,fromIdx,player}=_drag;
+      rounds[cri].enemy[fromLane].splice(fromIdx,1);
+      rounds[cri].enemy[cl].push(player);
+      renderEB(cri,fromLane);
+      renderEB(cri,cl);
+      saveLS();
+    });
+  }
+
   updEnemyTotal(ri,l);
 }
 
@@ -304,10 +347,12 @@ function uEnemy(ri,l,i,v){
   rounds[ri].enemy[l][i].power=parseInt(v)||0;
   // no auto-sort — use sort button
   updEnemyTotal(ri,l);
+  saveLS();
 }
 function sortEnemy(ri,l){
   rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);
   renderEB(ri,l);
+  saveLS();
 }
 function addE(ri,l){rounds[ri].enemy[l].push({name:"",power:0});renderEB(ri,l);}
 function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
@@ -426,7 +471,7 @@ function calcGranular(lanes,enemies){
       const sw=ne[tgt][wI];
       ne[oL]=ne[oL].filter(p=>p.name!==pl.name);ne[oL].push(sw);ne[tgt][wI]=pl;
       const r=evaluate(lanes,ne);
-      res.push({label:`${pl.name}(${Math.round(pl.power/1000)}K) ${LN[oL]}→${LN[tgt]}`,swap:`↔${sw.name}(${Math.round(sw.power/1000)}K)`,...r});
+      res.push({label:`${pl.name}(${Math.round(pl.power)}K) ${LN[oL]}→${LN[tgt]}`,swap:`↔${sw.name}(${Math.round(sw.power)}K)`,...r});
     }
   }
   return res;
@@ -721,7 +766,7 @@ function hCompare(resN,resI){
         h+=`<span class="tag" style="${bg};margin:1px 2px">`;
         h+=`${risky?'<span style="color:'+(isMoved?'#c00':'var(--lose)')+'">⚠</span>':''}`;
         h+=`${p.name} `;
-        h+=`<span style="${tc};font-size:9px">${Math.round(p.power/1000)}K`;
+        h+=`<span style="${tc};font-size:9px">${Math.round(p.power)}K`;
         if(defPct!==null)h+=` ${defPct}%d`;
         h+=`</span></span>`;
       });
@@ -753,11 +798,11 @@ function hFights(res){
       const bg=last?"var(--warnbg)":(close?(w?"rgba(250,238,218,.3)":"rgba(252,235,235,.3)"):"");
       h+=`<tr${bg?` style="background:${bg}"`:''}>`;
       h+=`<td style="color:var(--tx3);text-align:right">${i+1}</td>`;
-      h+=`<td style="text-align:right">${f.our?f.our.name+' ('+Math.round(f.our.power/1000)+'K)':''}</td>`;
+      h+=`<td style="text-align:right">${f.our?f.our.name+' ('+Math.round(f.our.power)+'K)':''}</td>`;
       h+=`<td style="text-align:center;color:var(--tx3)">vs</td>`;
-      h+=`<td${auto?' style="font-style:italic;color:var(--tx3)"':''}>${f.enemy?f.enemy.name+' ('+Math.round(f.enemy.power/1000)+'K)':'— none —'}</td>`;
+      h+=`<td${auto?' style="font-style:italic;color:var(--tx3)"':''}>${f.enemy?f.enemy.name+' ('+Math.round(f.enemy.power)+'K)':'— none —'}</td>`;
       h+=`<td class="${w?'fw':'fl'}">${auto?'AUTO':(w?'WIN':'LOSE')}`;
-      if(close&&!auto)h+=`<span style="font-size:9px;color:var(--warn);margin-left:2px">⚡${w?'+':'-'}${Math.round(Math.abs(f.margin)/1000)}K(${(f.pct*100).toFixed(1)}%)</span>`;
+      if(close&&!auto)h+=`<span style="font-size:9px;color:var(--warn);margin-left:2px">⚡${w?'+':'-'}${Math.round(Math.abs(f.margin))}K(${(f.pct*100).toFixed(1)}%)</span>`;
       if(last)h+=`<span style="font-size:9px;color:var(--warn);font-weight:600;margin-left:2px">FLAG</span>`;
       h+=`</td></tr>`;
     });
@@ -787,7 +832,7 @@ function hLineups(res){
   for(let i=0;i<3;i++){
     const team=[...res.lanes[i]].sort((a,b)=>a.power-b.power),won=res.details[i].won;
     h+=`<div class="card"><div style="font-weight:500;margin-bottom:3px;color:var(--${won?'win':'lose'});font-size:12px">${won?'🏴':'❌'} ${LN[i]} (${team.length})</div>`;
-    h+=`<div style="line-height:1.7">${team.map(p=>`<span class="tag">${p.name} <span style="color:var(--tx3)">${Math.round(p.power/1000)}K</span></span>`).join("")}</div></div>`;
+    h+=`<div style="line-height:1.7">${team.map(p=>`<span class="tag">${p.name} <span style="color:var(--tx3)">${Math.round(p.power)}K</span></span>`).join("")}</div></div>`;
   }
   h+=`<div class="cbox">${[0,1,2].map(i=>{const t=[...res.lanes[i]].sort((a,b)=>a.power-b.power);return`${LN[i]}: ${t.map(p=>p.name).join(", ")}`;}).join("\n")}</div>`;
   return h;
@@ -849,34 +894,10 @@ function loadLS(){
     return true;
   }catch(e){return false;}
 }
-// Patch all mutating functions to auto-save
-const _origUOur=uOur;
-function uOur(i,f,v){_origUOur(i,f,v);saveLS();}
-const _origAddOur=addOur;
-function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();saveLS();}
-const _origSortOur=sortOur;
-// sortOur is called via button — save in renderOur wrapper
-const _origRenderOur=renderOur;
-// wrap renderOur so every name edit also saves
-function _wrapNameSave(i,v){ourData[i].name=v;saveLS();}
-// patch addE, clearEnemyLane, uEnemy, sortEnemy to auto-save
-const _origAddE=addE;
-function addE(ri,l){rounds[ri].enemy[l].push({name:"",power:0});renderEB(ri,l);saveLS();}
-const _origClearLane=clearEnemyLane;
-function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);saveLS();}
-const _origUEnemy=uEnemy;
-function uEnemy(ri,l,i,v){rounds[ri].enemy[l][i].power=parseInt(v)||0;updEnemyTotal(ri,l);saveLS();}
-const _origSortEnemy=sortEnemy;
-function sortEnemy(ri,l){rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);renderEB(ri,l);saveLS();}
-// Save when round mode or blind inputs change — patch renderRC inline onchange calls
-// by saving after every rounds property write in renderRC rendering
-// Instead: intercept at the round data mutation points via a proxy-style debounce
+// Auto-save via debounced global change listener
 let _saveTimer=null;
 function debounceSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveLS,400);}
-// Observe rounds field mutations via event delegation
-document.addEventListener("change",e=>{
-  if(e.target.closest("#rContent"))debounceSave();
-});
+document.addEventListener("change",()=>debounceSave());
 
 // ═══════ INIT ═══════
 const _loaded=loadLS();
