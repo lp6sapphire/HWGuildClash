@@ -58,16 +58,19 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
   <input type="file" id="fileInput" accept=".json" onchange="doImport(event)">
 </div>
 
-<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer" onclick="toggleSection('ourSec',this)">
+  <span class="collapse-arrow" style="font-size:10px;transition:transform .2s">▼</span>
   <h2 style="margin:0">Our Team</h2>
   <span id="ourCount" style="font-size:11px;color:var(--tx3)"></span>
   <span style="flex:1"></span>
-  <button class="btn" onclick="addOur()">+ Player</button>
-  <button class="btn" onclick="sortOur();renderOur();saveLS()">↕ Sort</button>
-  <button class="btn" style="font-size:10px" onclick="clearOurPower()">🗑 Clear power</button>
+  <button class="btn" onclick="event.stopPropagation();addOur()">+ Player</button>
+  <button class="btn" onclick="event.stopPropagation();sortOur();renderOur();saveLS()">↕ Sort</button>
+  <button class="btn" style="font-size:10px" onclick="event.stopPropagation();clearOurPower()">🗑 Clear power</button>
 </div>
+<div id="ourSec">
 <div class="ogrid" id="ourGrid"></div>
-<div style="font-size:10px;color:var(--tx3);margin-top:2px">Atk+Def=Total (auto). % = share of total. Enter: Atk→Def→next player.</div>
+<div style="font-size:10px;color:var(--tx3);margin-top:2px">Atk+Def=Total (auto). % = share of total. Enter: Name→Name, Atk→Def→next.</div>
+</div>
 
 <h2 style="margin-top:14px">Rounds (5 enemies)</h2>
 <div class="tabs" id="rTabs"></div>
@@ -85,6 +88,7 @@ for(let i=0;i<NR;i++) rounds.push({
 });
 let aR=0;
 let _calcDone=false;
+let _enemyCollapsed=false;
 
 // ourData starts empty — use Import to load your roster
 
@@ -93,6 +97,21 @@ function zf(el){if(el.value==='0')el.value='';}
 function zb(el){if(el.value==='')el.value='0';}
 function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
 function clearOurPower(){ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});renderOur();saveLS();}
+function toggleSection(id,header){
+  const el=document.getElementById(id);if(!el)return;
+  const hidden=el.style.display==='none';
+  el.style.display=hidden?'':'none';
+  const arrow=header.querySelector('.collapse-arrow');
+  if(arrow)arrow.style.transform=hidden?'':'rotate(-90deg)';
+}
+function toggleEnemy(ri,header){
+  const el=document.getElementById('enemySec_'+ri);if(!el)return;
+  const hidden=el.style.display==='none';
+  el.style.display=hidden?'':'none';
+  _enemyCollapsed=!hidden;
+  const arrow=header.querySelector('.collapse-arrow');
+  if(arrow)arrow.style.transform=hidden?'':'rotate(-90deg)';
+}
 
 // ═══════ OUR TEAM — 3 tables × 10 rows ═══════
 function renderOur(){
@@ -201,6 +220,14 @@ function renderRC(){
   const c=document.getElementById("rContent"),rd=rounds[aR];let h="";
   h+=`<div style="margin-bottom:8px"><label style="font-size:11px;cursor:pointer"><input type="checkbox" ${rd.mode==="blind"?"checked":""} onchange="rounds[${aR}].mode=this.checked?'blind':'detailed';renderRTabs();renderRC()"> Blind mode</label></div>`;
 
+  // Collapsible enemy header
+  const eCol=_enemyCollapsed;
+  h+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer" onclick="toggleEnemy(${aR},this)">
+    <span class="collapse-arrow" style="font-size:10px;transition:transform .2s${eCol?';transform:rotate(-90deg)':''}">▼</span>
+    <h3 style="margin:0;font-size:13px;font-weight:500">Enemy R${aR+1}</h3>
+  </div>`;
+  h+=`<div id="enemySec_${aR}" style="${eCol?'display:none':''}">`;
+
   if(rd.mode==="blind"){
     h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
     for(let l=0;l<3;l++){
@@ -258,6 +285,7 @@ function renderRC(){
     }
     h+=`</div>`;
   }
+  h+=`</div>`; // close enemySec
 
   h+=`<button class="btn btn-p" style="padding:8px 20px;width:100%;margin-bottom:8px" onclick="calc(${aR})" id="cBtn_${aR}">Calculate round ${aR+1}</button>`;
   h+=`<div id="rRes_${aR}"></div>`;
@@ -807,6 +835,14 @@ function calc(ri){
       rd.viewMode="normal";
       _calcDone=true;
       renderOur();
+      // Collapse our team and enemy sections after calc
+      const ourSec=document.getElementById('ourSec');
+      if(ourSec){ourSec.style.display='none';const hdr=ourSec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}}
+      const eSec=document.getElementById('enemySec_'+ri);
+      if(eSec){eSec.style.display='none';const a=eSec.previousElementSibling?.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}
+      _enemyCollapsed=true;
+      // Re-render enemy to apply dimming
+      if(rd.mode==='detailed')for(let l=0;l<3;l++) renderEB(ri,l);
       showRes(ri);
     }catch(e){alert("Error: "+e.message);console.error(e);}
     btn.textContent=`Calculate round ${ri+1}`;btn.disabled=false;
