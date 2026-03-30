@@ -60,6 +60,7 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 
 <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
   <h2 style="margin:0">Our Team</h2>
+  <span id="ourCount" style="font-size:11px;color:var(--tx3)"></span>
   <span style="flex:1"></span>
   <button class="btn" onclick="addOur()">+ Player</button>
   <button class="btn" onclick="sortOur();renderOur();saveLS()">↕ Sort</button>
@@ -83,6 +84,7 @@ for(let i=0;i<NR;i++) rounds.push({
   result:null, resultIns:null, viewMode:"normal"
 });
 let aR=0;
+let _calcDone=false;
 
 // ourData starts empty — use Import to load your roster
 
@@ -108,9 +110,10 @@ function renderOur(){
     </tr></thead><tbody>`;
     for(let i=start;i<to;i++){
       const p=ourData[i];
+      const isZero=p.total===0&&_calcDone;
       const atkPct=p.total>0&&p.atk>0?Math.round(p.atk/p.total*100):0;
       const defPct=p.total>0&&p.def>0?Math.round(p.def/p.total*100):0;
-      h+=`<tr>
+      h+=`<tr style="${isZero?'opacity:0.35':''}">
         <td style="color:var(--tx3);font-size:9px;text-align:right">${i+1}</td>
         <td><input type="text" id="our_${i}_name" value="${p.name}" onchange="ourData[${i}].name=this.value;saveLS()"
           onkeydown="ourNameEnter(event,${i})"
@@ -145,6 +148,9 @@ function renderOur(){
     return h;
   };
   g.innerHTML=mkTable(0,10)+mkTable(10,20)+mkTable(20,30);
+  const active=ourData.filter(p=>p.total>0).length;
+  const ct=document.getElementById("ourCount");
+  if(ct)ct.textContent=`(${active} of ${ourData.length} in calc)`;
 }
 
 // Enter navigation: atk[i] → def[i] → atk[i+1] → def[i+1] → ...
@@ -277,6 +283,7 @@ function renderEB(ri,l){
     tr.draggable=true;
     tr.dataset.ri=ri;tr.dataset.l=l;tr.dataset.i=i;
     tr.style.cursor="grab";
+    if(_calcDone&&p.power===0)tr.style.opacity="0.35";
     tr.innerHTML=`
       <td style="color:var(--tx3);font-size:9px;width:14px;text-align:right;user-select:none">⠿</td>
       <td style="padding:1px 2px"><input class="num" id="ep_${ri}_${l}_${i}" value="${p.power}"
@@ -791,10 +798,15 @@ function calc(ri){
       }
       res.lP=res.details.map(d=>calcProb(d));
       res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
+      // Compute robust flags for normal result too
+      let _rf=0;for(let i=0;i<3;i++)if(res.details[i].won&&laneRobust(res.lanes[i],res.enemies[i],INS_UPSETS))_rf++;
+      res.robustFlags=_rf;
       res._m=rd.mode;
       rd.result=res;
       rd.resultIns=resIns;
       rd.viewMode="normal";
+      _calcDone=true;
+      renderOur();
       showRes(ri);
     }catch(e){alert("Error: "+e.message);console.error(e);}
     btn.textContent=`Calculate round ${ri+1}`;btn.disabled=false;
@@ -845,8 +857,8 @@ function showMode(ri,vm){
     {l:"Reliability",v:Math.round(r.oP*100)+"%",c:r.oP>.9?"var(--win)":r.oP>.7?"var(--warn)":"var(--lose)"}
   ];
   if(!isD&&r.minFlags!==undefined)items.push({l:"Min fl.",v:r.minFlags,c:r.minFlags>=2?"var(--win)":"var(--warn)"});
-  if(vm==="insurance"&&r.robustFlags!==undefined){
-    items.push({l:"🛡 Robust fl.",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
+  if(r.robustFlags!==undefined){
+    items.push({l:"🛡 Robust",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
   }
   let h=`<div class="metrics">${items.map(i=>`<div class="metric"><small>${i.l}</small><b${i.c?' style="color:'+i.c+'"':''}>${i.v}</b></div>`).join("")}</div>`;
   const tabs=isD?["Fights","Robustness","Fine swaps","Lineups"]:["Fights","Scenarios","Lineups"];
