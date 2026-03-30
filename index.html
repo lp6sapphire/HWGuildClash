@@ -112,7 +112,9 @@ function renderOur(){
       const defPct=p.total>0&&p.def>0?Math.round(p.def/p.total*100):0;
       h+=`<tr>
         <td style="color:var(--tx3);font-size:9px;text-align:right">${i+1}</td>
-        <td><input type="text" value="${p.name}" onchange="ourData[${i}].name=this.value;saveLS()" style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
+        <td><input type="text" id="our_${i}_name" value="${p.name}" onchange="ourData[${i}].name=this.value;saveLS()"
+          onkeydown="ourNameEnter(event,${i})"
+          style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
         <td>
           <div style="display:flex;align-items:center;gap:1px">
             <input class="onum-i" id="our_${i}_atk" value="${p.atk||0}"
@@ -148,6 +150,13 @@ function renderOur(){
 // Enter navigation: atk[i] → def[i] → atk[i+1] → def[i+1] → ...
 // pendingFocus: set by ourEnter, consumed by renderOur after DOM rebuild
 let _pendingFocus=null;
+function ourNameEnter(e,i){
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  const ni=(i+1)%ourData.length;
+  const el=document.getElementById(`our_${ni}_name`);
+  if(el){el.focus();el.select();}
+}
 function ourEnter(e,i,field){
   if(e.key!=='Enter')return;
   e.preventDefault();
@@ -192,12 +201,12 @@ function renderRC(){
       h+=`<div class="card"><b style="font-size:12px">${LN[l]}</b>
         <div class="bgr"><div style="font-size:10px;color:var(--tx2)">Attack</div><div style="font-size:10px;color:var(--tx2)">Defense</div><div style="font-size:10px;color:var(--tx2)">Total</div></div>
         <div class="bgr">
-          <input class="num" value="${rd.bA[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bA[${l}]=this.value;updBlindTotal(${aR},${l})">
-          <input class="num" value="${rd.bD[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bD[${l}]=this.value;updBlindTotal(${aR},${l})">
-          <input class="num" id="bT_${aR}_${l}" value="${rd.bT[l]}" onfocus="zf(this)" onchange="rounds[${aR}].bT[${l}]=this.value" style="font-weight:600">
+          <input class="num" id="bA_${aR}_${l}" value="${rd.bA[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bA[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'A')">
+          <input class="num" id="bD_${aR}_${l}" value="${rd.bD[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bD[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'D')">
+          <input class="num" id="bT_${aR}_${l}" value="${rd.bT[l]}" onfocus="zf(this)" onchange="rounds[${aR}].bT[${l}]=this.value" style="font-weight:600" onkeydown="blindEnter(event,${aR},${l},'T')">
         </div>
         <div style="font-size:10px;color:var(--tx2);margin-top:4px">Players</div>
-        <input class="num" value="${rd.bC[l]}" onfocus="zf(this)" onblur="zb(this)" onchange="rounds[${aR}].bC[${l}]=this.value" style="width:60px">
+        <input class="num" id="bC_${aR}_${l}" value="${rd.bC[l]}" onfocus="zf(this)" onblur="zb(this)" onchange="rounds[${aR}].bC[${l}]=this.value" style="width:60px" onkeydown="blindEnter(event,${aR},${l},'C')">
       </div>`;
     }
     h+=`</div>`;
@@ -218,10 +227,12 @@ function renderRC(){
           <div style="font-size:9px;color:var(--tx2)">Total</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:8px">
-          <input class="num" value="${rd.eA[l]}" onfocus="zf(this)" placeholder="—"
-            onchange="rounds[${aR}].eA[${l}]=this.value">
-          <input class="num" value="${rd.eD[l]}" onfocus="zf(this)" placeholder="—"
-            onchange="rounds[${aR}].eD[${l}]=this.value">
+          <input class="num" id="eA_${aR}_${l}" value="${rd.eA[l]}" onfocus="zf(this)" placeholder="—"
+            onchange="rounds[${aR}].eA[${l}]=this.value"
+            onkeydown="enemyNavEnter(event,${aR},${l},'atk')">
+          <input class="num" id="eD_${aR}_${l}" value="${rd.eD[l]}" onfocus="zf(this)" placeholder="—"
+            onchange="rounds[${aR}].eD[${l}]=this.value"
+            onkeydown="enemyNavEnter(event,${aR},${l},'def')">
           <div id="eTotal_${aR}_${l}" class="num" style="font-weight:600;background:var(--bg2);text-align:right;padding:3px 5px;border-radius:4px;border:1px solid var(--bd)">${eTot>0?eTot.toLocaleString():'—'}</div>
         </div>
         <div style="border-top:1px solid var(--bd);padding-top:6px">
@@ -322,14 +333,49 @@ function renderEB(ri,l){
 function enemyEnter(e,ri,l,i){
   if(e.key!=='Enter')return;
   e.preventDefault();
+  e.target.dispatchEvent(new Event('change'));
+  // Next player in same lane
   const next=document.getElementById(`ep_${ri}_${l}_${i+1}`);
-  if(next){next.focus();next.select();}
-  else{
-    // move to first player of next lane
-    const nl=(l+1)%3;
-    const n0=document.getElementById(`ep_${ri}_${nl}_0`);
-    if(n0){n0.focus();n0.select();}
+  if(next){next.focus();next.select();return;}
+  // Last player → atk of next lane (wraps around)
+  const nl=(l+1)%3;
+  const nA=document.getElementById(`eA_${ri}_${nl}`);
+  if(nA){nA.focus();nA.select();}
+}
+// Enemy Atk/Def Enter: atk→def→first player→...→next lane atk
+function enemyNavEnter(e,ri,l,field){
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  e.target.dispatchEvent(new Event('change'));
+  if(field==='atk'){
+    const d=document.getElementById(`eD_${ri}_${l}`);
+    if(d){d.focus();d.select();}
+  }else{
+    // def → first player
+    const p0=document.getElementById(`ep_${ri}_${l}_0`);
+    if(p0){p0.focus();p0.select();}
+    else{
+      // No players → next lane atk
+      const nl=(l+1)%3;
+      const nA=document.getElementById(`eA_${ri}_${nl}`);
+      if(nA){nA.focus();nA.select();}
+    }
   }
+}
+
+// Blind mode Enter: A→D→T→C→next lane A→D→T→C→...
+function blindEnter(e,ri,l,field){
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  e.target.dispatchEvent(new Event('change'));
+  const order=['A','D','T','C'];
+  const ci=order.indexOf(field);
+  let nl=l, nf;
+  if(ci<order.length-1){nf=order[ci+1];}
+  else{nl=(l+1)%3;nf=order[0];}
+  const prefix=nf==='C'?'bC':'b'+nf;
+  const el=document.getElementById(`${prefix}_${ri}_${nl}`);
+  if(el){el.focus();el.select();}
 }
 
 function updEnemyTotal(ri,l){
