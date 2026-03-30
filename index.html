@@ -96,7 +96,18 @@ let _enemyCollapsed=false;
 function zf(el){if(el.value==='0')el.value='';}
 function zb(el){if(el.value==='')el.value='0';}
 function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
-function clearOurPower(){ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});renderOur();saveLS();}
+function clearOurPower(){
+  ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});
+  _calcDone=false;_enemyCollapsed=false;
+  // Expand our team section so user sees reset
+  const sec=document.getElementById('ourSec');
+  if(sec&&sec.style.display==='none'){
+    sec.style.display='';
+    const hdr=sec.previousElementSibling;
+    if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}
+  }
+  renderOur();saveLS();
+}
 function toggleSection(id,header){
   const el=document.getElementById(id);if(!el)return;
   const hidden=el.style.display==='none';
@@ -668,20 +679,17 @@ function genScen(total,count,label){
   return sc;
 }
 
-// ═══════ INSURANCE: UPSET-BASED ═══════
-// Instead of penalizing players by defense ratio, we simulate:
-// "What if 1-2 of our winners unexpectedly lose?"
-// Remove the N most vulnerable winners, re-simulate.
-// Robust flag = lane still wins even with N upsets.
-const INS_UPSETS=1; // how many random upsets per lane to assume
+// ═══════ INSURANCE: MARGIN-BASED ═══════
+// Starts from normal result, then tries to THICKEN thin wins.
+// Scores by: robustFlags → flags → minMargin → wins
+// This means it prefers layouts where the weakest winning fight has the biggest margin.
+const INS_UPSETS=1;
 
 function laneRobust(team,enemy,nUpsets){
   const sim=simDetail(team,enemy);
   if(!sim.won)return false;
-  // Find real wins (not autos) sorted by margin ascending (most vulnerable first)
   const realWins=sim.fights.filter(f=>f.our&&f.enemy&&f.winner==='us').sort((a,b)=>a.margin-b.margin);
-  if(realWins.length<=nUpsets)return false; // not enough real wins to absorb upsets
-  // Remove the N most vulnerable winners from our team
+  if(realWins.length<=nUpsets)return false;
   const toRemove=new Set(realWins.slice(0,nUpsets).map(f=>f.our.name));
   const reducedTeam=team.filter(p=>!toRemove.has(p.name));
   return simDetail(reducedTeam,enemy).won;
@@ -689,43 +697,59 @@ function laneRobust(team,enemy,nUpsets){
 
 function evaluateIns(lanes,enemies,nUpsets){
   const base=evaluate(lanes,enemies);
-  let robustFlags=0;
+  let robustFlags=0, minMargin=Infinity;
   for(let i=0;i<3;i++){
-    if(base.details[i].won&&laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
+    if(base.details[i].won){
+      if(laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
+      // Find minimum margin across all real winning fights
+      const realWins=base.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us');
+      for(const f of realWins){if(f.margin<minMargin)minMargin=f.margin;}
+    }
   }
-  return{...base,robustFlags};
+  if(minMargin===Infinity)minMargin=0;
+  return{...base,robustFlags,minMargin};
 }
 
-// Insurance optimizer: same heuristics + swaps, but scores by robustFlags first
-function isBetterIns(rf,f,w,r,brf,bf,bw,br){
-  if(rf>brf)return true;if(rf===brf&&f>bf)return true;
-  if(rf===brf&&f===bf&&w>bw)return true;
-  if(rf===brf&&f===bf&&w===bw&&r<br)return true;
+// Priority: robustFlags → flags → minMargin (HIGHER=better) → wins
+function isBetterIns(rf,f,mm,w,brf,bf,bmm,bw){
+  if(rf>brf)return true;if(rf<brf)return false;
+  if(f>bf)return true;if(f<bf)return false;
+  if(mm>bmm)return true;if(mm<bmm)return false;
+  if(w>bw)return true;
   return false;
 }
 
-function optimizeCoreIns(pool,enemies){
-  const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
-  let bRF=0,bF=0,bW=0,bR=999,bL=null;
-  const tryC=lanes=>{const r=evaluateIns(lanes,enemies,INS_UPSETS);if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;bL=lanes.map(l=>[...l]);}};
+// Insurance starts from NORMAL result and re-optimizes with margin-aware scoring
+function optimizeCoreIns(pool,enemies,normalLanes){
+  // Start from normal result if available, otherwise from scratch
+  let lanes;
+  if(normalLanes){
+    lanes=normalLanes.map(l=>[...l]);
+  }else{
+    const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
+    let bL=null,bRF=0,bF=0,bMM=0,bW=0;
+    const tryC=la=>{const r=evaluateIns(la,enemies,INS_UPSETS);if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;bL=la.map(l=>[...l]);}};
+    _heurPhase(pool,enemies,n,desc,asc,tryC);
+    if(!bL)return null;
+    lanes=bL.map(l=>[...l]);
+  }
 
-  _heurPhase(pool,enemies,n,desc,asc,tryC);
-  if(!bL)return null;
+  let cur=evaluateIns(lanes,enemies,INS_UPSETS);
+  let bRF=cur.robustFlags,bF=cur.flags,bMM=cur.minMargin,bW=cur.wins;
 
-  // Phase 2: 1-on-1 swaps scored by insurance
-  const lanes=bL.map(l=>[...l]);
+  // Phase 1: 1-on-1 swaps optimizing margins
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
-        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
     if(!imp)break;
   }
 
-  // Phase 3: 2-on-2 swaps scored by insurance
+  // Phase 2: 2-on-2 swaps
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
@@ -733,13 +757,13 @@ function optimizeCoreIns(pool,enemies){
           [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
           [lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];
           const r=evaluateIns(lanes,enemies,INS_UPSETS);
-          if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+          if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
           else{[lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];[lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];}
         }
     if(!imp)break;
   }
 
-  // Phase 4: move optimization (insurance scoring)
+  // Phase 3: moves
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
@@ -748,27 +772,27 @@ function optimizeCoreIns(pool,enemies){
         const p=lanes[la].splice(i,1)[0];
         lanes[lb].push(p);
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
-        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{lanes[lb].pop();lanes[la].splice(i,0,p);}
       }
     }
     if(!imp)break;
   }
 
-  // Phase 5: re-run swaps after moves
+  // Phase 4: re-swaps after moves
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
-        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
     if(!imp)break;
   }
 
   const fin=evaluateIns(lanes,enemies,INS_UPSETS);
-  return{flags:fin.flags,wins:fin.wins,risk:fin.risk,robustFlags:fin.robustFlags,lanes:lanes.map(l=>[...l]),details:fin.details};
+  return{flags:fin.flags,wins:fin.wins,risk:fin.risk,robustFlags:fin.robustFlags,minMargin:fin.minMargin,lanes:lanes.map(l=>[...l]),details:fin.details};
 }
 
 // ═══════ CALCULATE ═══════
@@ -792,8 +816,8 @@ function calc(ri){
           br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
         }
         res.blindRes=br;res.enemies=primaryE;res.minFlags=Math.min(...br.map(r=>r.flags));
-        // Insurance: same pool, different scoring (robust flags)
-        resIns=optimizeCoreIns(pool,primaryE);
+        // Insurance: start from normal result, optimize margins
+        resIns=optimizeCoreIns(pool,primaryE,res.lanes);
         if(resIns){
           resIns.enemies=primaryE;
           resIns.lP=resIns.details.map(d=>calcProb(d));
@@ -813,8 +837,8 @@ function calc(ri){
         res.robust=calcRobust(res.lanes,enemies);
         res.granular=calcGranular(res.lanes,enemies);
         res.enemies=enemies;
-        // Insurance: same pool, robust scoring
-        resIns=optimizeCoreIns(pool,enemies);
+        // Insurance: start from normal result, optimize margins
+        resIns=optimizeCoreIns(pool,enemies,res.lanes);
         if(resIns){
           resIns.enemies=enemies;
           resIns.lP=resIns.details.map(d=>calcProb(d));
@@ -826,9 +850,17 @@ function calc(ri){
       }
       res.lP=res.details.map(d=>calcProb(d));
       res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
-      // Compute robust flags for normal result too
-      let _rf=0;for(let i=0;i<3;i++)if(res.details[i].won&&laneRobust(res.lanes[i],res.enemies[i],INS_UPSETS))_rf++;
+      // Compute robust flags and minMargin for normal result
+      let _rf=0,_mm=Infinity;
+      for(let i=0;i<3;i++){
+        if(res.details[i].won){
+          if(laneRobust(res.lanes[i],res.enemies[i],INS_UPSETS))_rf++;
+          const rw=res.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us');
+          for(const f of rw){if(f.margin<_mm)_mm=f.margin;}
+        }
+      }
       res.robustFlags=_rf;
+      res.minMargin=_mm===Infinity?0:_mm;
       res._m=rd.mode;
       rd.result=res;
       rd.resultIns=resIns;
@@ -895,6 +927,9 @@ function showMode(ri,vm){
   if(!isD&&r.minFlags!==undefined)items.push({l:"Min fl.",v:r.minFlags,c:r.minFlags>=2?"var(--win)":"var(--warn)"});
   if(r.robustFlags!==undefined){
     items.push({l:"🛡 Robust",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
+  }
+  if(r.minMargin!==undefined){
+    items.push({l:"Thin win",v:r.minMargin+"K",c:r.minMargin>50?"var(--win)":r.minMargin>20?"var(--warn)":"var(--lose)"});
   }
   let h=`<div class="metrics">${items.map(i=>`<div class="metric"><small>${i.l}</small><b${i.c?' style="color:'+i.c+'"':''}>${i.v}</b></div>`).join("")}</div>`;
   const tabs=isD?["Fights","Robustness","Fine swaps","Lineups"]:["Fights","Scenarios","Lineups"];
@@ -1059,7 +1094,7 @@ function doImport(e){
   reader.onload=function(ev){
     try{
       const d=JSON.parse(ev.target.result);
-      if(d.ourData){ourData=d.ourData;renderOur();}
+      if(d.ourData){ourData=d.ourData;_calcDone=false;_enemyCollapsed=false;renderOur();}
       if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR){Object.assign(rounds[i],{
         mode:r.mode||"detailed",
         enemy:r.enemy||[[],[],[]],
@@ -1068,7 +1103,11 @@ function doImport(e){
         eA:r.eA||["","",""],eD:r.eD||["","",""],
         result:null,resultIns:null,viewMode:"normal"
       });}});
-      saveLS();renderRTabs();renderRC();alert("Loaded!");
+      saveLS();renderRTabs();renderRC();
+      // Expand sections after import
+      const sec=document.getElementById('ourSec');
+      if(sec){sec.style.display='';const hdr=sec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}}
+      alert("Loaded!");
     }catch(err){alert("Error: "+err.message);}
   };
   reader.readAsText(file);e.target.value="";
