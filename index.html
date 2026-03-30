@@ -74,9 +74,6 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 
 <script>
 const LN=["TL","ML","BL"],RISK=0.05,NR=5;
-// Insurance parameters: players with def/total < threshold get power penalty
-const INS_DEF_THRESHOLD=0.30; // below 30% defense ratio = risky
-const INS_PENALTY=0.40;       // max 40% power reduction for most unbalanced player
 let ourData=[], rounds=[];
 for(let i=0;i<NR;i++) rounds.push({
   mode:i===0?"blind":"detailed",
@@ -213,7 +210,6 @@ function renderRC(){
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
           <b style="font-size:12px">${LN[l]}</b>
           <span style="flex:1"></span>
-          <button class="btn" style="font-size:9px;padding:1px 6px" onclick="sortEnemy(${aR},${l})">↕</button>
           <button class="btn" style="font-size:9px;padding:1px 5px" onclick="clearEnemyLane(${aR},${l})">🗑</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:2px">
@@ -234,10 +230,9 @@ function renderRC(){
             <button class="btn" style="font-size:10px;padding:0 8px;line-height:1.7;color:var(--win);border-color:var(--win)"
               onclick="addE(${aR},${l})">+</button>
           </div>
-          <table style="font-size:10px;table-layout:fixed;width:100%"><thead><tr>
+          <table style="font-size:10px;width:100%"><thead><tr>
             <th style="width:14px;font-weight:400;color:var(--tx3)">#</th>
-            <th style="font-weight:400;color:var(--tx3)">Name</th>
-            <th style="text-align:right;font-weight:400;color:var(--tx3);width:68px">Power</th>
+            <th style="text-align:right;font-weight:400;color:var(--tx3)">Power</th>
             <th style="width:18px"></th>
           </tr></thead>
           <tbody id="eB_${aR}_${l}"></tbody></table>
@@ -266,23 +261,21 @@ let _drag=null; // {ri, fromLane, fromIdx, player}
 function renderEB(ri,l){
   const b=document.getElementById(`eB_${ri}_${l}`);if(!b)return;b.innerHTML="";
   rounds[ri].enemy[l].forEach((p,i)=>{
+    p.name=LN[l]+"_"+(i+1);
     const tr=document.createElement("tr");
     tr.draggable=true;
     tr.dataset.ri=ri;tr.dataset.l=l;tr.dataset.i=i;
     tr.style.cursor="grab";
     tr.innerHTML=`
       <td style="color:var(--tx3);font-size:9px;width:14px;text-align:right;user-select:none">⠿</td>
-      <td style="padding:1px 2px"><input type="text" value="${p.name}"
-        style="font-size:10px;padding:2px 4px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"
-        onchange="rounds[${ri}].enemy[${l}][${i}].name=this.value;saveLS()"></td>
-      <td style="padding:1px 2px;width:68px"><input class="num" id="ep_${ri}_${l}_${i}" value="${p.power}"
+      <td style="padding:1px 2px"><input class="num" id="ep_${ri}_${l}_${i}" value="${p.power}"
         style="font-size:10px;padding:2px 4px;width:100%"
         onfocus="zf(this)" onblur="zb(this)"
         onchange="uEnemy(${ri},${l},${i},this.value)"
         onkeydown="enemyEnter(event,${ri},${l},${i})"></td>
       <td style="width:18px;padding:1px 1px"><button class="btn btn-d"
         style="padding:0 3px;font-size:9px;line-height:1.5"
-        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l});saveLS()">×</button></td>`;
+        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);sortEnemyAsc(${ri},${l});renderEB(${ri},${l});saveLS()">×</button></td>`;
     // drag events
     tr.addEventListener("dragstart",e=>{
       _drag={ri:+tr.dataset.ri,fromLane:+tr.dataset.l,fromIdx:+tr.dataset.i,
@@ -315,6 +308,8 @@ function renderEB(ri,l){
       const {fromLane,fromIdx,player}=_drag;
       rounds[cri].enemy[fromLane].splice(fromIdx,1);
       rounds[cri].enemy[cl].push(player);
+      sortEnemyAsc(cri,fromLane);
+      sortEnemyAsc(cri,cl);
       renderEB(cri,fromLane);
       renderEB(cri,cl);
       saveLS();
@@ -343,9 +338,11 @@ function updEnemyTotal(ri,l){
   if(el) el.textContent=tot>0?tot.toLocaleString():'—';
 }
 
+function sortEnemyAsc(ri,l){rounds[ri].enemy[l].sort((a,b)=>a.power-b.power);}
 function uEnemy(ri,l,i,v){
   rounds[ri].enemy[l][i].power=parseInt(v)||0;
-  // no auto-sort — use sort button
+  sortEnemyAsc(ri,l);
+  renderEB(ri,l);
   updEnemyTotal(ri,l);
   saveLS();
 }
@@ -354,7 +351,7 @@ function sortEnemy(ri,l){
   renderEB(ri,l);
   saveLS();
 }
-function addE(ri,l){rounds[ri].enemy[l].push({name:"",power:0});renderEB(ri,l);}
+function addE(ri,l){rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
 function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
 
 // ═══════ CORE: SIMULATION ═══════
@@ -364,7 +361,7 @@ function simDetail(team,enemy){
   const fights=[];let minMW=Infinity,risky=0;
   while(oi<our.length&&ei<es.length){
     of2++;ef++;
-    const margin=our[oi].power-es[ei].power,pct=Math.abs(margin)/Math.max(our[oi].power,es[ei].power);
+    const margin=our[oi].power-es[ei].power,pct=Math.max(our[oi].power,es[ei].power)>0?Math.abs(margin)/Math.max(our[oi].power,es[ei].power):0;
     if(our[oi].power>es[ei].power){
       ow++;last="us";if(margin<minMW)minMW=margin;if(pct<RISK)risky++;
       fights.push({our:our[oi],enemy:es[ei],winner:"us",margin,pct});
@@ -385,37 +382,86 @@ function evaluate(lanes,enemies){let flags=0,wins=0,risk=0,details=[];for(let i=
 function calcProb(d){if(!d.won)return 0;let p=1;for(const f of d.fights){if(!f.our||!f.enemy)continue;if(f.winner==="us"&&f.pct<RISK)p*=.5+(f.pct/RISK)*.5;}return p;}
 function isBetter(f,w,r,bf,bw,br){return f>bf||(f===bf&&w>bw)||(f===bf&&w===bw&&r<br);}
 
+// ═══════ SHARED: HEURISTIC PHASE (4 sacrifice strategies × 6 split strategies) ═══════
+function _heurPhase(pool,enemies,n,desc,asc,tryC){
+  for(let sac=0;sac<3;sac++){
+    const wl=[0,1,2].filter(i=>i!==sac);
+    for(let ns=0;ns<=Math.min(n-2,10);ns++){
+      const nr=n-ns;
+      for(let n1=Math.max(1,nr-10);n1<=Math.min(10,nr-1);n1++){
+        const n2=nr-n1;if(n2<1||n2>10)continue;
+        // 4 sacrifice selection strategies
+        const sacSets=[];
+        // A: weakest ns players
+        sacSets.push(asc.slice(0,ns));
+        // B: middle players
+        if(ns>0&&ns<=n-2){const mid=Math.floor((n-ns)/2);const ms=[...desc].slice(mid,mid+ns);if(ms.length===ns)sacSets.push(ms);}
+        // C: enemy-aware — players who beat fewest enemies on win lanes
+        if(ns>0){
+          const eW0=[...enemies[wl[0]]].sort((a,b)=>a.power-b.power);
+          const eW1=[...enemies[wl[1]]].sort((a,b)=>a.power-b.power);
+          const scored=pool.map(p=>({...p,_v:eW0.filter(e=>p.power>e.power).length+eW1.filter(e=>p.power>e.power).length})).sort((a,b)=>a._v-b._v);
+          sacSets.push(scored.slice(0,ns));
+        }
+        // D: flag-impact — greedy removal: remove players whose absence doesn't flip the flag
+        if(ns>0&&ns<=10){
+          const allPool=[...pool];
+          const removed=[];
+          for(let k=0;k<ns;k++){
+            let bestRm=null,bestScore=-1;
+            for(let j=0;j<allPool.length;j++){
+              if(removed.some(r=>r.name===allPool[j].name))continue;
+              const cand=allPool.filter((p,ci)=>ci!==j&&!removed.some(r=>r.name===p.name));
+              // Quick check: split cand into two groups and count flags
+              const half=Math.ceil(cand.length/2);
+              const t1=cand.slice(0,Math.min(10,half)),t2=cand.slice(Math.max(0,cand.length-Math.min(10,cand.length-half)));
+              const f1=simDetail(t1,enemies[wl[0]]).won?1:0;
+              const f2=simDetail(t2,enemies[wl[1]]).won?1:0;
+              const score=f1+f2;
+              if(score>bestScore||(score===bestScore&&allPool[j].power<(bestRm?bestRm.power:Infinity))){
+                bestScore=score;bestRm=allPool[j];
+              }
+            }
+            if(bestRm)removed.push(bestRm);
+          }
+          if(removed.length===ns)sacSets.push(removed);
+        }
+        // Deduplicate sacrifice sets
+        const seen=new Set();
+        for(const sacT of sacSets){
+          const key=sacT.map(p=>p.name).sort().join(',');
+          if(seen.has(key))continue;seen.add(key);
+          const rem=pool.filter(p=>!sacT.some(s=>s.name===p.name)).sort((a,b)=>b.power-a.power);
+          if(rem.length!==nr)continue;
+          // 6 split strategies for remaining players
+          const mk=fn=>{let a=[],b=[];fn(rem,a,b,n1,n2);return[a,b];};
+          const e1=[...enemies[wl[0]]].sort((x,y)=>x.power-y.power);
+          const e2=[...enemies[wl[1]]].sort((x,y)=>x.power-y.power);
+          const splits=[
+            mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+            mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===1?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+            [rem.slice(0,n1),rem.slice(n1)],
+            [rem.slice(n2),rem.slice(0,n2)],
+            mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)((i>>1)%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
+            mk((r,a,b,na,nb)=>{r.forEach(p=>{if(a.length>=na)b.push(p);else if(b.length>=nb)a.push(p);else{const b1=e1.filter(e=>p.power>e.power).length,b2=e2.filter(e=>p.power>e.power).length;(b1>=b2?a:b).push(p);}});})
+          ];
+          for(const[g1,g2]of splits){
+            let la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g1];la[wl[1]]=[...g2];tryC(la);
+            la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g2];la[wl[1]]=[...g1];tryC(la);
+          }
+        }
+      }
+    }
+  }
+}
+
 // ═══════ CORE: OPTIMIZER ═══════
 function optimizeCore(pool,enemies){
   const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
   let bF=0,bW=0,bR=999,bL=null;
   const tryC=lanes=>{const r=evaluate(lanes,enemies);if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;bL=lanes.map(l=>[...l]);}};
 
-  for(let sac=0;sac<3;sac++){
-    const wl=[0,1,2].filter(i=>i!==sac);
-    for(let ns=Math.max(4,n-20);ns<Math.min(n-10,11);ns++){
-      const nr=n-ns;
-      for(let n1=Math.max(5,nr-10);n1<=Math.min(10,nr-5);n1++){
-        const n2=nr-n1;if(n2<5||n2>10)continue;
-        const sacT=asc.slice(0,ns),rem=desc.slice(0,n-ns);
-        const mk=fn=>{let a=[],b=[];fn(rem,a,b,n1,n2);return[a,b];};
-        const e1=[...enemies[wl[0]]].sort((x,y)=>x.power-y.power);
-        const e2=[...enemies[wl[1]]].sort((x,y)=>x.power-y.power);
-        const splits=[
-          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
-          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)(i%2===1?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
-          [rem.slice(0,n1),rem.slice(n1)],
-          [rem.slice(n2),rem.slice(0,n2)],
-          mk((r,a,b,na,nb)=>r.forEach((p,i)=>{if(a.length<na&&b.length<nb)((i>>1)%2===0?a:b).push(p);else if(a.length<na)a.push(p);else b.push(p);})),
-          mk((r,a,b,na,nb)=>{r.forEach(p=>{if(a.length>=na)b.push(p);else if(b.length>=nb)a.push(p);else{const b1=e1.filter(e=>p.power>e.power).length,b2=e2.filter(e=>p.power>e.power).length;(b1>=b2?a:b).push(p);}});})
-        ];
-        for(const[g1,g2]of splits){
-          let la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g1];la[wl[1]]=[...g2];tryC(la);
-          la=[null,null,null];la[sac]=[...sacT];la[wl[0]]=[...g2];la[wl[1]]=[...g1];tryC(la);
-        }
-      }
-    }
-  }
+  _heurPhase(pool,enemies,n,desc,asc,tryC);
   if(!bL)return null;
 
   // Phase 2: 1-on-1 swap optimization
@@ -444,6 +490,35 @@ function optimizeCore(pool,enemies){
         }
     if(!imp)break;
   }
+
+  // Phase 4: move optimization — move 1 player between lanes (changes lane sizes)
+  for(let round=0;round<10;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
+      if(la===lb)continue;
+      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
+      for(let i=0;i<lanes[la].length;i++){
+        const p=lanes[la].splice(i,1)[0];
+        lanes[lb].push(p);
+        const r=evaluate(lanes,enemies);
+        if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        else{lanes[lb].pop();lanes[la].splice(i,0,p);}
+      }
+    }
+    if(!imp)break;
+  }
+
+  // Phase 5: re-run swaps after moves may have changed lane sizes
+  for(let round=0;round<5;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
+        [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
+        const r=evaluate(lanes,enemies);
+        if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
+      }
+    if(!imp)break;
+  }
+
   const fin=evaluate(lanes,enemies);
   return{flags:fin.flags,wins:fin.wins,risk:fin.risk,lanes:lanes.map(l=>[...l]),details:fin.details};
 }
@@ -512,40 +587,117 @@ function genScen(total,count,label){
   return sc;
 }
 
-// ═══════ INSURANCE HELPERS ═══════
-// Build pool with defense-penalized powers for risky players
-function insuredPool(){
-  return ourData.filter(p=>p.total>0).map(p=>{
-    let pw=p.total;
-    if(p.atk>0&&p.def>0){
-      const dr=p.def/p.total;
-      if(dr<INS_DEF_THRESHOLD){
-        const risk=(INS_DEF_THRESHOLD-dr)/INS_DEF_THRESHOLD; // 0..1
-        pw=Math.round(p.total*(1-risk*INS_PENALTY));
+// ═══════ INSURANCE: UPSET-BASED ═══════
+// Instead of penalizing players by defense ratio, we simulate:
+// "What if 1-2 of our winners unexpectedly lose?"
+// Remove the N most vulnerable winners, re-simulate.
+// Robust flag = lane still wins even with N upsets.
+const INS_UPSETS=1; // how many random upsets per lane to assume
+
+function laneRobust(team,enemy,nUpsets){
+  const sim=simDetail(team,enemy);
+  if(!sim.won)return false;
+  // Find real wins (not autos) sorted by margin ascending (most vulnerable first)
+  const realWins=sim.fights.filter(f=>f.our&&f.enemy&&f.winner==='us').sort((a,b)=>a.margin-b.margin);
+  if(realWins.length<=nUpsets)return false; // not enough real wins to absorb upsets
+  // Remove the N most vulnerable winners from our team
+  const toRemove=new Set(realWins.slice(0,nUpsets).map(f=>f.our.name));
+  const reducedTeam=team.filter(p=>!toRemove.has(p.name));
+  return simDetail(reducedTeam,enemy).won;
+}
+
+function evaluateIns(lanes,enemies,nUpsets){
+  const base=evaluate(lanes,enemies);
+  let robustFlags=0;
+  for(let i=0;i<3;i++){
+    if(base.details[i].won&&laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
+  }
+  return{...base,robustFlags};
+}
+
+// Insurance optimizer: same heuristics + swaps, but scores by robustFlags first
+function isBetterIns(rf,f,w,r,brf,bf,bw,br){
+  if(rf>brf)return true;if(rf===brf&&f>bf)return true;
+  if(rf===brf&&f===bf&&w>bw)return true;
+  if(rf===brf&&f===bf&&w===bw&&r<br)return true;
+  return false;
+}
+
+function optimizeCoreIns(pool,enemies){
+  const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
+  let bRF=0,bF=0,bW=0,bR=999,bL=null;
+  const tryC=lanes=>{const r=evaluateIns(lanes,enemies,INS_UPSETS);if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;bL=lanes.map(l=>[...l]);}};
+
+  _heurPhase(pool,enemies,n,desc,asc,tryC);
+  if(!bL)return null;
+
+  // Phase 2: 1-on-1 swaps scored by insurance
+  const lanes=bL.map(l=>[...l]);
+  for(let round=0;round<10;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
+        [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
+        const r=evaluateIns(lanes,enemies,INS_UPSETS);
+        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
+      }
+    if(!imp)break;
+  }
+
+  // Phase 3: 2-on-2 swaps scored by insurance
+  for(let round=0;round<3;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
+        for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
+          [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
+          [lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];
+          const r=evaluateIns(lanes,enemies,INS_UPSETS);
+          if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+          else{[lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];[lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];}
+        }
+    if(!imp)break;
+  }
+
+  // Phase 4: move optimization (insurance scoring)
+  for(let round=0;round<10;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
+      if(la===lb)continue;
+      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
+      for(let i=0;i<lanes[la].length;i++){
+        const p=lanes[la].splice(i,1)[0];
+        lanes[lb].push(p);
+        const r=evaluateIns(lanes,enemies,INS_UPSETS);
+        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        else{lanes[lb].pop();lanes[la].splice(i,0,p);}
       }
     }
-    return{name:p.name,power:pw};
-  });
-}
-// After finding insurance lanes, re-evaluate with real powers for honest display
-function reEvalWithRealPower(insLanes,enemies){
-  const nameToReal={};
-  ourData.filter(p=>p.total>0).forEach(p=>nameToReal[p.name]=p.total);
-  const realLanes=insLanes.map(lane=>lane.map(p=>({name:p.name,power:nameToReal[p.name]||p.power})));
-  const ev=evaluate(realLanes,enemies);
-  return{realLanes,flagsReal:ev.flags,winsReal:ev.wins,detailsReal:ev.details,
-    lP:ev.details.map(d=>calcProb(d))};
+    if(!imp)break;
+  }
+
+  // Phase 5: re-run swaps after moves
+  for(let round=0;round<5;round++){let imp=false;
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+      for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
+        [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
+        const r=evaluateIns(lanes,enemies,INS_UPSETS);
+        if(isBetterIns(r.robustFlags,r.flags,r.wins,r.risk,bRF,bF,bW,bR)){bRF=r.robustFlags;bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
+      }
+    if(!imp)break;
+  }
+
+  const fin=evaluateIns(lanes,enemies,INS_UPSETS);
+  return{flags:fin.flags,wins:fin.wins,risk:fin.risk,robustFlags:fin.robustFlags,lanes:lanes.map(l=>[...l]),details:fin.details};
 }
 
 // ═══════ CALCULATE ═══════
 function calc(ri){
   const rd=rounds[ri],pool=ourData.filter(p=>p.total>0).map(p=>({name:p.name,power:p.total}));
-  if(pool.length<12){alert("Minimum 12 players");return;}
+  if(pool.length<5){alert("Minimum 5 players");return;}
   const btn=document.getElementById(`cBtn_${ri}`);btn.textContent="Calculating...";btn.disabled=true;
   setTimeout(()=>{
     try{
       let res,resIns=null;
-      const poolIns=insuredPool();
       if(rd.mode==="blind"){
         const totals=rd.bT.map(t=>parseInt(t)||0),counts=rd.bC.map(c=>parseInt(c)||10);
         if(totals.some(t=>t===0)){alert("Enter lane totals");btn.textContent="Calculate";btn.disabled=false;return;}
@@ -559,40 +711,35 @@ function calc(ri){
           br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
         }
         res.blindRes=br;res.enemies=primaryE;res.minFlags=Math.min(...br.map(r=>r.flags));
-        // Insurance for blind mode
-        resIns=optimizeCore(poolIns,primaryE);
+        // Insurance: same pool, different scoring (robust flags)
+        resIns=optimizeCoreIns(pool,primaryE);
         if(resIns){
-          const rev=reEvalWithRealPower(resIns.lanes,primaryE);
-          Object.assign(resIns,rev);
           resIns.enemies=primaryE;
-          resIns.lP=rev.lP;
-          resIns.oP=rev.lP.reduce((a,b)=>a*(b||1),1);
+          resIns.lP=resIns.details.map(d=>calcProb(d));
+          resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);
           const brI=[];
           for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){
-            const r=evaluate(rev.realLanes,[s0.players,s1.players,s2.players]);
+            const r=evaluate(resIns.lanes,[s0.players,s1.players,s2.players]);
             brI.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
           }
           resIns.blindRes=brI;resIns.minFlags=Math.min(...brI.map(r=>r.flags));
           resIns._m="blind";
         }
       }else{
-        // Allow empty enemy lanes — no restriction
         const enemies=rd.enemy.map(l=>l.filter(p=>p.power>0));
         res=optimizeCore(pool,enemies);
         if(!res){alert("No solution found");btn.textContent=`Calculate round ${ri+1}`;btn.disabled=false;return;}
         res.robust=calcRobust(res.lanes,enemies);
         res.granular=calcGranular(res.lanes,enemies);
         res.enemies=enemies;
-        // Insurance
-        resIns=optimizeCore(poolIns,enemies);
+        // Insurance: same pool, robust scoring
+        resIns=optimizeCoreIns(pool,enemies);
         if(resIns){
-          const rev=reEvalWithRealPower(resIns.lanes,enemies);
-          Object.assign(resIns,rev);
           resIns.enemies=enemies;
-          resIns.lP=rev.lP;
-          resIns.oP=rev.lP.reduce((a,b)=>a*(b||1),1);
-          resIns.robust=calcRobust(rev.realLanes,enemies);
-          resIns.granular=calcGranular(rev.realLanes,enemies);
+          resIns.lP=resIns.details.map(d=>calcProb(d));
+          resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);
+          resIns.robust=calcRobust(resIns.lanes,enemies);
+          resIns.granular=calcGranular(resIns.lanes,enemies);
           resIns._m="detailed";
         }
       }
@@ -645,23 +792,15 @@ function showMode(ri,vm){
   }
   const r=(vm==="insurance"&&resIns)?resIns:res;
   const isD=r._m==="detailed";
-  // Use realLanes/detailsReal for insurance view
-  const dispRes=(vm==="insurance"&&resIns)?{
-    ...r,
-    lanes:r.realLanes||r.lanes,
-    details:r.detailsReal||r.details,
-    flags:r.flagsReal!==undefined?r.flagsReal:r.flags,
-    wins:r.winsReal!==undefined?r.winsReal:r.wins
-  }:r;
   const items=[
-    {l:"Split",v:dispRes.lanes.map(l=>l.length).join("–")},
-    {l:"Flags",v:`${dispRes.flags}/3`,c:dispRes.flags>=2?"var(--win)":"var(--warn)"},
-    {l:"Wins",v:dispRes.wins},
+    {l:"Split",v:r.lanes.map(l=>l.length).join("–")},
+    {l:"Flags",v:`${r.flags}/3`,c:r.flags>=2?"var(--win)":"var(--warn)"},
+    {l:"Wins",v:r.wins},
     {l:"Reliability",v:Math.round(r.oP*100)+"%",c:r.oP>.9?"var(--win)":r.oP>.7?"var(--warn)":"var(--lose)"}
   ];
-  if(!isD)items.push({l:"Min fl.",v:dispRes.minFlags,c:dispRes.minFlags>=2?"var(--win)":"var(--warn)"});
-  if(vm==="insurance"){
-    items.push({l:"⚠️ risky",v:insRiskyCount(),c:"var(--warn)"});
+  if(!isD&&r.minFlags!==undefined)items.push({l:"Min fl.",v:r.minFlags,c:r.minFlags>=2?"var(--win)":"var(--warn)"});
+  if(vm==="insurance"&&r.robustFlags!==undefined){
+    items.push({l:"🛡 Robust fl.",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
   }
   let h=`<div class="metrics">${items.map(i=>`<div class="metric"><small>${i.l}</small><b${i.c?' style="color:'+i.c+'"':''}>${i.v}</b></div>`).join("")}</div>`;
   const tabs=isD?["Fights","Robustness","Fine swaps","Lineups"]:["Fights","Scenarios","Lineups"];
@@ -669,10 +808,6 @@ function showMode(ri,vm){
   h+=`<div class="tabs" id="st_${ri}_${suffix}">${tabs.map((t,i)=>`<button class="tab${i===0?' on':''}" onclick="showSub(${ri},${i},'${vm}')">${t}</button>`).join("")}</div><div id="sc_${ri}_${suffix}"></div>`;
   inner.innerHTML=h;
   showSub(ri,0,vm);
-}
-
-function insRiskyCount(){
-  return ourData.filter(p=>p.total>0&&p.atk>0&&p.def>0&&(p.def/p.total)<INS_DEF_THRESHOLD).length;
 }
 
 function showSub(ri,idx,vm){
@@ -684,51 +819,39 @@ function showSub(ri,idx,vm){
   const resIns=rd.resultIns;
   const r=(vm==="insurance"&&resIns)?resIns:rd.result;
   const isD=r._m==="detailed";
-  // For insurance, display with real power lanes
-  const dispRes=(vm==="insurance"&&resIns)?{
-    ...r,
-    lanes:r.realLanes||r.lanes,
-    details:r.detailsReal||r.details
-  }:r;
   const names=isD?["fights","robust","granular","lineups"]:["fights","scenarios","lineups"];
   const id=names[idx];
-  if(id==="fights")c.innerHTML=hFights(dispRes);
-  else if(id==="robust")c.innerHTML=hTable(dispRes.robust,"Enemy reshuffles by blocks:");
-  else if(id==="granular")c.innerHTML=hTable(dispRes.granular,"Fine moves TOP-5:");
-  else if(id==="scenarios")c.innerHTML=hTable(dispRes.blindRes,"64 scenarios:");
-  else if(id==="lineups")c.innerHTML=hLineups(dispRes);
+  if(id==="fights")c.innerHTML=hFights(r);
+  else if(id==="robust")c.innerHTML=hTable(r.robust,"Enemy reshuffles by blocks:");
+  else if(id==="granular")c.innerHTML=hTable(r.granular,"Fine moves TOP-5:");
+  else if(id==="scenarios")c.innerHTML=hTable(r.blindRes,"64 scenarios:");
+  else if(id==="lineups")c.innerHTML=hLineups(r);
 }
 
 // ═══════ COMPARE VIEW ═══════
 function hCompare(resN,resI){
   const normLane=new Map(),insLane=new Map();
   resN.lanes.forEach((lane,l)=>lane.forEach(p=>normLane.set(p.name,l)));
-  const iLanes=resI.realLanes||resI.lanes;
-  iLanes.forEach((lane,l)=>lane.forEach(p=>insLane.set(p.name,l)));
+  resI.lanes.forEach((lane,l)=>lane.forEach(p=>insLane.set(p.name,l)));
   const moved=new Set([...normLane.keys()].filter(n=>normLane.get(n)!==insLane.get(n)));
-  const pInfo={};ourData.forEach(p=>{pInfo[p.name]=p;});
-  const isRisky=name=>{const p=pInfo[name];return p&&p.total>0&&p.def>=0&&(p.def/p.total)<INS_DEF_THRESHOLD;};
-  const iFlags=resI.flagsReal!==undefined?resI.flagsReal:resI.flags;
-  const iWins=resI.winsReal!==undefined?resI.winsReal:resI.wins;
-  const iDets=resI.detailsReal||resI.details;
 
   // Summary metrics
   let h=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">`;
-  const mkMet=(label,res2,flags,wins,dets)=>{
+  const mkMet=(label,res2)=>{
     const oP=res2.oP||0;
     let m=`<div class="card" style="padding:8px"><div style="font-size:11px;font-weight:600;margin-bottom:5px">${label}</div>`;
     m+=`<div style="display:flex;gap:4px;flex-wrap:wrap">`;
     for(let l=0;l<3;l++){
-      const d=dets[l];
+      const d=res2.details[l];
       m+=`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--${d.won?'winbg':'losebg'});color:var(--${d.won?'win':'lose'})">${LN[l]} ${d.ow}:${d.ew}</span>`;
     }
     m+=`</div>`;
-    m+=`<div style="font-size:10px;margin-top:4px;color:var(--tx2)">Flags <b style="color:var(--${flags>=2?'win':'warn'})">${flags}/3</b> · Wins <b>${wins}</b> · Rel. <b style="color:var(--${oP>.9?'win':oP>.7?'warn':'lose'})">${Math.round(oP*100)}%</b></div>`;
+    m+=`<div style="font-size:10px;margin-top:4px;color:var(--tx2)">Flags <b style="color:var(--${res2.flags>=2?'win':'warn'})">${res2.flags}/3</b> · Wins <b>${res2.wins}</b> · Rel. <b style="color:var(--${oP>.9?'win':oP>.7?'warn':'lose'})">${Math.round(oP*100)}%</b>${res2.robustFlags!==undefined?' · Robust <b>'+res2.robustFlags+'/3</b>':''}</div>`;
     m+=`</div>`;
     return m;
   };
-  h+=mkMet("Normal",resN,resN.flags,resN.wins,resN.details);
-  h+=mkMet("🛡 Insurance",resI,iFlags,iWins,iDets);
+  h+=mkMet("Normal",resN);
+  h+=mkMet("🛡 Insurance",resI);
   h+=`</div>`;
 
   if(moved.size===0){
@@ -738,8 +861,7 @@ function hCompare(resN,resI){
 
   h+=`<div style="font-size:10px;color:var(--tx2);margin-bottom:8px">`;
   h+=`<b style="color:#e8a000">${moved.size} player(s) reassigned</b> between Normal and Insurance. `;
-  h+=`<span style="background:#e8a000;color:#000;padding:0 4px;border-radius:3px;font-size:9px">moved</span> `;
-  h+=`<span style="color:var(--lose)">⚠</span> = def &lt;${Math.round(INS_DEF_THRESHOLD*100)}% of total (risky player).`;
+  h+=`<span style="background:#e8a000;color:#000;padding:0 4px;border-radius:3px;font-size:9px">moved</span>`;
   h+=`</div>`;
 
   // Side-by-side lanes
@@ -747,28 +869,19 @@ function hCompare(resN,resI){
   for(let col=0;col<2;col++){
     const isIns=col===1;
     const label=isIns?"🛡 Insurance":"Normal";
-    const lanes=isIns?iLanes:resN.lanes;
-    const dets=isIns?iDets:resN.details;
+    const res2=isIns?resI:resN;
     h+=`<div><div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bd)">${label}</div>`;
     for(let l=0;l<3;l++){
-      const won=dets[l].won;
-      const laneTotal=lanes[l].reduce((s,p)=>s+p.power,0);
+      const won=res2.details[l].won;
+      const laneTotal=res2.lanes[l].reduce((s,p)=>s+p.power,0);
       h+=`<div style="margin-bottom:10px">`;
       h+=`<div style="font-size:11px;font-weight:500;color:var(--${won?'win':'lose'});margin-bottom:3px">${won?'🏴':'❌'} ${LN[l]} · ${laneTotal.toLocaleString()}</div>`;
       h+=`<div style="line-height:1.9">`;
-      [...lanes[l]].sort((a,b)=>b.power-a.power).forEach(p=>{
+      [...res2.lanes[l]].sort((a,b)=>b.power-a.power).forEach(p=>{
         const isMoved=moved.has(p.name);
-        const risky=isRisky(p.name);
-        const info=pInfo[p.name];
-        const defPct=info&&info.total?Math.round(info.def/info.total*100):null;
         const bg=isMoved?"background:#e8a000;color:#000":"";
         const tc=isMoved?"color:rgba(0,0,0,0.55)":"color:var(--tx3)";
-        h+=`<span class="tag" style="${bg};margin:1px 2px">`;
-        h+=`${risky?'<span style="color:'+(isMoved?'#c00':'var(--lose)')+'">⚠</span>':''}`;
-        h+=`${p.name} `;
-        h+=`<span style="${tc};font-size:9px">${Math.round(p.power)}K`;
-        if(defPct!==null)h+=` ${defPct}%d`;
-        h+=`</span></span>`;
+        h+=`<span class="tag" style="${bg};margin:1px 2px">${p.name} <span style="${tc};font-size:9px">${Math.round(p.power)}K</span></span>`;
       });
       h+=`</div></div>`;
     }
@@ -901,7 +1014,7 @@ document.addEventListener("change",()=>debounceSave());
 
 // ═══════ INIT ═══════
 const _loaded=loadLS();
-sortOur();renderOur();renderRTabs();renderRC();
+renderOur();renderRTabs();renderRC();
 // Show subtle indicator if data was restored
 if(_loaded){
   const ind=document.createElement("div");
