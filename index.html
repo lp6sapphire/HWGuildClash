@@ -29,11 +29,8 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 .btn{padding:4px 10px;font-size:11px;border:1px solid var(--bd);border-radius:5px;cursor:pointer;background:var(--bg);color:var(--tx);font-family:inherit}
 .btn:hover{background:var(--bg2)}.btn-p{background:var(--win);color:#fff;border-color:var(--win);font-weight:500}
 .btn-d{color:var(--lose);border-color:var(--lose)}
-/* 3 columns for our-team */
 .ogrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;align-items:start}
 .ogrid table{width:100%;border-collapse:collapse;table-layout:fixed}
-.ogr td{padding:2px 2px;border-bottom:1px solid var(--bd);vertical-align:middle;white-space:nowrap}
-.ogr input[type=text]{font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%}
 .onum-i{font-size:10px;padding:2px 3px;text-align:right;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%;font-variant-numeric:tabular-nums}
 .pct-inline{font-size:8px;color:var(--tx3);min-width:20px;text-align:right;display:inline-block;flex-shrink:0}
 .egr{display:grid;grid-template-columns:22px 1fr 70px 22px;gap:1px;align-items:center}
@@ -90,8 +87,6 @@ let aR=0;
 let _calcDone=false;
 let _enemyCollapsed=false;
 
-// ourData starts empty — use Import to load your roster
-
 // ═══════ HELPERS ═══════
 function zf(el){if(el.value==='0')el.value='';}
 function zb(el){if(el.value==='')el.value='0';}
@@ -99,7 +94,6 @@ function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
 function clearOurPower(){
   ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});
   _calcDone=false;_enemyCollapsed=false;
-  // Expand our team section so user sees reset
   const sec=document.getElementById('ourSec');
   if(sec&&sec.style.display==='none'){
     sec.style.display='';
@@ -183,8 +177,6 @@ function renderOur(){
   if(ct)ct.textContent=`(${active} of ${ourData.length} in calc)`;
 }
 
-// Enter navigation: atk[i] → def[i] → atk[i+1] → def[i+1] → ...
-// pendingFocus: set by ourEnter, consumed by renderOur after DOM rebuild
 let _pendingFocus=null;
 function ourNameEnter(e,i){
   if(e.key!=='Enter')return;
@@ -200,12 +192,10 @@ function ourEnter(e,i,field){
   if(field==='atk'){nf='def';}
   else{nf='atk';ni=(i+1)%ourData.length;}
   _pendingFocus=`our_${ni}_${nf}`;
-  // trigger onchange manually so value is saved before re-render
   const inp=document.getElementById(`our_${i}_${field}`);
-  if(inp) uOur(i,field,inp.value); // this calls renderOur which consumes _pendingFocus
+  if(inp) uOur(i,field,inp.value);
 }
 
-// uOur — NO auto-sort, sort only via button
 function uOur(i,f,v){
   v=parseInt(v)||0;
   ourData[i][f]=v;
@@ -231,7 +221,6 @@ function renderRC(){
   const c=document.getElementById("rContent"),rd=rounds[aR];let h="";
   h+=`<div style="margin-bottom:8px"><label style="font-size:11px;cursor:pointer"><input type="checkbox" ${rd.mode==="blind"?"checked":""} onchange="rounds[${aR}].mode=this.checked?'blind':'detailed';renderRTabs();renderRC()"> Blind mode</label></div>`;
 
-  // Collapsible enemy header
   const eCol=_enemyCollapsed;
   h+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer" onclick="toggleEnemy(${aR},this)">
     <span class="collapse-arrow" style="font-size:10px;transition:transform .2s${eCol?';transform:rotate(-90deg)':''}">▼</span>
@@ -255,7 +244,6 @@ function renderRC(){
     }
     h+=`</div>`;
   } else {
-    // Detailed mode — card style matching blind mode, stats on top, players below
     h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
     for(let l=0;l<3;l++){
       const eTot=rounds[aR].enemy[l].reduce((s,p)=>s+(p.power||0),0);
@@ -296,7 +284,7 @@ function renderRC(){
     }
     h+=`</div>`;
   }
-  h+=`</div>`; // close enemySec
+  h+=`</div>`;
 
   h+=`<button class="btn btn-p" style="padding:8px 20px;width:100%;margin-bottom:8px" onclick="calc(${aR})" id="cBtn_${aR}">Calculate round ${aR+1}</button>`;
   h+=`<div id="rRes_${aR}"></div>`;
@@ -312,12 +300,11 @@ function updBlindTotal(ri,l){
 }
 
 // ═══════ DRAG-AND-DROP STATE ═══════
-let _drag=null; // {ri, fromLane, fromIdx, player}
+let _drag=null;
 
 function renderEB(ri,l){
   const b=document.getElementById(`eB_${ri}_${l}`);if(!b)return;b.innerHTML="";
   rounds[ri].enemy[l].forEach((p,i)=>{
-    p.name=LN[l]+"_"+(i+1);
     const tr=document.createElement("tr");
     tr.draggable=true;
     tr.dataset.ri=ri;tr.dataset.l=l;tr.dataset.i=i;
@@ -333,7 +320,6 @@ function renderEB(ri,l){
       <td style="width:18px;padding:1px 1px"><button class="btn btn-d"
         style="padding:0 3px;font-size:9px;line-height:1.5"
         onclick="rounds[${ri}].enemy[${l}].splice(${i},1);sortEnemyAsc(${ri},${l});renderEB(${ri},${l});saveLS()">×</button></td>`;
-    // drag events
     tr.addEventListener("dragstart",e=>{
       _drag={ri:+tr.dataset.ri,fromLane:+tr.dataset.l,fromIdx:+tr.dataset.i,
              player:{...rounds[+tr.dataset.ri].enemy[+tr.dataset.l][+tr.dataset.i]}};
@@ -344,8 +330,6 @@ function renderEB(ri,l){
     b.appendChild(tr);
   });
 
-  // Make the whole card a drop zone (works even when lane is empty)
-  // Use a marker to avoid adding duplicate listeners on re-render
   const card=b.closest(".card");
   if(card&&!card._dropBound){
     card._dropBound=true;
@@ -380,15 +364,12 @@ function enemyEnter(e,ri,l,i){
   if(e.key!=='Enter')return;
   e.preventDefault();
   e.target.dispatchEvent(new Event('change'));
-  // Next player in same lane
   const next=document.getElementById(`ep_${ri}_${l}_${i+1}`);
   if(next){next.focus();next.select();return;}
-  // Last player → atk of next lane (wraps around)
   const nl=(l+1)%3;
   const nA=document.getElementById(`eA_${ri}_${nl}`);
   if(nA){nA.focus();nA.select();}
 }
-// Enemy Atk/Def Enter: atk→def→first player→...→next lane atk
 function enemyNavEnter(e,ri,l,field){
   if(e.key!=='Enter')return;
   e.preventDefault();
@@ -397,19 +378,15 @@ function enemyNavEnter(e,ri,l,field){
     const d=document.getElementById(`eD_${ri}_${l}`);
     if(d){d.focus();d.select();}
   }else{
-    // def → first player
     const p0=document.getElementById(`ep_${ri}_${l}_0`);
     if(p0){p0.focus();p0.select();}
     else{
-      // No players → next lane atk
       const nl=(l+1)%3;
       const nA=document.getElementById(`eA_${ri}_${nl}`);
       if(nA){nA.focus();nA.select();}
     }
   }
 }
-
-// Blind mode Enter: A→D→T→C→next lane A→D→T→C→...
 function blindEnter(e,ri,l,field){
   if(e.key!=='Enter')return;
   e.preventDefault();
@@ -438,13 +415,8 @@ function uEnemy(ri,l,i,v){
   updEnemyTotal(ri,l);
   saveLS();
 }
-function sortEnemy(ri,l){
-  rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);
-  renderEB(ri,l);
-  saveLS();
-}
-function addE(ri,l){rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
-function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
+function addE(ri,l){rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);saveLS();}
+function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);saveLS();}
 
 // ═══════ CORE: SIMULATION ═══════
 function simDetail(team,enemy){
@@ -466,7 +438,6 @@ function simDetail(team,enemy){
   }
   while(oi<our.length){of2++;ow++;last="us";fights.push({our:our[oi],enemy:null,winner:"us",margin:0,pct:0});if(of2>=2){oi++;of2=0;}}
   while(ei<es.length){ef++;ew++;last="them";fights.push({our:null,enemy:es[ei],winner:"them",margin:0,pct:0});if(ef>=2){ei++;ef=0;}}
-  // Empty enemy lane → auto win
   if(es.length===0&&our.length>0)last="us";
   return{won:last==="us",ow,ew,fights,minMW,risky};
 }
@@ -482,20 +453,15 @@ function _heurPhase(pool,enemies,n,desc,asc,tryC){
       const nr=n-ns;
       for(let n1=Math.max(1,nr-10);n1<=Math.min(10,nr-1);n1++){
         const n2=nr-n1;if(n2<1||n2>10)continue;
-        // 4 sacrifice selection strategies
         const sacSets=[];
-        // A: weakest ns players
         sacSets.push(asc.slice(0,ns));
-        // B: middle players
         if(ns>0&&ns<=n-2){const mid=Math.floor((n-ns)/2);const ms=[...desc].slice(mid,mid+ns);if(ms.length===ns)sacSets.push(ms);}
-        // C: enemy-aware — players who beat fewest enemies on win lanes
         if(ns>0){
           const eW0=[...enemies[wl[0]]].sort((a,b)=>a.power-b.power);
           const eW1=[...enemies[wl[1]]].sort((a,b)=>a.power-b.power);
           const scored=pool.map(p=>({...p,_v:eW0.filter(e=>p.power>e.power).length+eW1.filter(e=>p.power>e.power).length})).sort((a,b)=>a._v-b._v);
           sacSets.push(scored.slice(0,ns));
         }
-        // D: flag-impact — greedy removal: remove players whose absence doesn't flip the flag
         if(ns>0&&ns<=10){
           const allPool=[...pool];
           const removed=[];
@@ -504,7 +470,6 @@ function _heurPhase(pool,enemies,n,desc,asc,tryC){
             for(let j=0;j<allPool.length;j++){
               if(removed.some(r=>r.name===allPool[j].name))continue;
               const cand=allPool.filter((p,ci)=>ci!==j&&!removed.some(r=>r.name===p.name));
-              // Quick check: split cand into two groups and count flags
               const half=Math.ceil(cand.length/2);
               const t1=cand.slice(0,Math.min(10,half)),t2=cand.slice(Math.max(0,cand.length-Math.min(10,cand.length-half)));
               const f1=simDetail(t1,enemies[wl[0]]).won?1:0;
@@ -518,14 +483,12 @@ function _heurPhase(pool,enemies,n,desc,asc,tryC){
           }
           if(removed.length===ns)sacSets.push(removed);
         }
-        // Deduplicate sacrifice sets
         const seen=new Set();
         for(const sacT of sacSets){
           const key=sacT.map(p=>p.name).sort().join(',');
           if(seen.has(key))continue;seen.add(key);
           const rem=pool.filter(p=>!sacT.some(s=>s.name===p.name)).sort((a,b)=>b.power-a.power);
           if(rem.length!==nr)continue;
-          // 6 split strategies for remaining players
           const mk=fn=>{let a=[],b=[];fn(rem,a,b,n1,n2);return[a,b];};
           const e1=[...enemies[wl[0]]].sort((x,y)=>x.power-y.power);
           const e2=[...enemies[wl[1]]].sort((x,y)=>x.power-y.power);
@@ -556,7 +519,6 @@ function optimizeCore(pool,enemies){
   _heurPhase(pool,enemies,n,desc,asc,tryC);
   if(!bL)return null;
 
-  // Phase 2: 1-on-1 swap optimization
   const lanes=bL.map(l=>[...l]);
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
@@ -569,7 +531,6 @@ function optimizeCore(pool,enemies){
     if(!imp)break;
   }
 
-  // Phase 3: 2-on-2 swap optimization
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
@@ -583,7 +544,6 @@ function optimizeCore(pool,enemies){
     if(!imp)break;
   }
 
-  // Phase 4: move optimization — move 1 player between lanes (changes lane sizes)
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
@@ -599,7 +559,6 @@ function optimizeCore(pool,enemies){
     if(!imp)break;
   }
 
-  // Phase 5: re-run swaps after moves may have changed lane sizes
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -618,7 +577,6 @@ function optimizeCore(pool,enemies){
 // ═══════ ROBUSTNESS ═══════
 function calcRobust(lanes,enemies){
   const all=[...enemies[0],...enemies[1],...enemies[2]].sort((a,b)=>b.power-a.power);
-  // Groups of 10 — max players per lane in game rules
   const eG=[all.slice(0,10),all.slice(10,20),all.slice(20)];
   const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],gn=["TL","ML","BL"];
   return perms.map(p=>{const el=[eG[p[0]],eG[p[1]],eG[p[2]]];const r=evaluate(lanes,el);return{label:`${gn[p[0]]}→${gn[p[1]]}→${gn[p[2]]}`,...r};});
@@ -633,7 +591,7 @@ function calcGranular(lanes,enemies){
     for(let tgt=0;tgt<3;tgt++){
       if(tgt===oL)continue;
       const ne=enemies.map(l=>[...l]);
-      if(ne[tgt].length===0)continue; // guard for empty lane
+      if(ne[tgt].length===0)continue;
       const wI=ne[tgt].reduce((mi,p,i,a)=>p.power<a[mi].power?i:mi,0);
       const sw=ne[tgt][wI];
       ne[oL]=ne[oL].filter(p=>p.name!==pl.name);ne[oL].push(sw);ne[tgt][wI]=pl;
@@ -654,21 +612,17 @@ function genEst(total,count,label){
 function genScen(total,count,label){
   if(count<=0)return[];
   const avg=total/count,sc=[];
-  // uniform — always safe
   sc.push({name:"uniform",players:Array.from({length:count},(_,i)=>({name:`${label}_${i+1}`,power:Math.round(avg)}))});
-  // linear — needs count>=2
   if(count>=2){
     const lw=[];for(let i=0;i<count;i++)lw.push(.5+i/(count-1));const lwS=lw.reduce((a,b)=>a+b,0);
     sc.push({name:"linear",players:lw.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/lwS)}))});
   }
-  // 1strong — needs count>=2
   if(count>=2){
     const tp=avg*1.8,rp=(total-tp)/(count-1),th=[];
     for(let i=0;i<count-1;i++)th.push({name:`${label}_${i+1}`,power:Math.round(rp)});
     th.push({name:`${label}_boss`,power:Math.round(tp)});
     sc.push({name:"1strong",players:th});
   }
-  // 2strong — needs count>=3
   if(count>=3){
     const t1=avg*1.6,t2=avg*1.4,rp2=(total-t1-t2)/(count-2),ts=[];
     for(let i=0;i<count-2;i++)ts.push({name:`${label}_${i+1}`,power:Math.round(rp2)});
@@ -680,9 +634,6 @@ function genScen(total,count,label){
 }
 
 // ═══════ INSURANCE: MARGIN-BASED ═══════
-// Starts from normal result, then tries to THICKEN thin wins.
-// Scores by: robustFlags → flags → minMargin → wins
-// This means it prefers layouts where the weakest winning fight has the biggest margin.
 const INS_UPSETS=1;
 
 function laneRobust(team,enemy,nUpsets){
@@ -701,7 +652,6 @@ function evaluateIns(lanes,enemies,nUpsets){
   for(let i=0;i<3;i++){
     if(base.details[i].won){
       if(laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
-      // Find minimum margin across all real winning fights
       const realWins=base.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us');
       for(const f of realWins){if(f.margin<minMargin)minMargin=f.margin;}
     }
@@ -710,7 +660,6 @@ function evaluateIns(lanes,enemies,nUpsets){
   return{...base,robustFlags,minMargin};
 }
 
-// Priority: robustFlags → flags → minMargin (HIGHER=better) → wins
 function isBetterIns(rf,f,mm,w,brf,bf,bmm,bw){
   if(rf>brf)return true;if(rf<brf)return false;
   if(f>bf)return true;if(f<bf)return false;
@@ -719,9 +668,7 @@ function isBetterIns(rf,f,mm,w,brf,bf,bmm,bw){
   return false;
 }
 
-// Insurance starts from NORMAL result and re-optimizes with margin-aware scoring
 function optimizeCoreIns(pool,enemies,normalLanes){
-  // Start from normal result if available, otherwise from scratch
   let lanes;
   if(normalLanes){
     lanes=normalLanes.map(l=>[...l]);
@@ -737,7 +684,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   let cur=evaluateIns(lanes,enemies,INS_UPSETS);
   let bRF=cur.robustFlags,bF=cur.flags,bMM=cur.minMargin,bW=cur.wins;
 
-  // Phase 1: 1-on-1 swaps optimizing margins
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -749,7 +695,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
     if(!imp)break;
   }
 
-  // Phase 2: 2-on-2 swaps
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
@@ -763,7 +708,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
     if(!imp)break;
   }
 
-  // Phase 3: moves
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
@@ -779,7 +723,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
     if(!imp)break;
   }
 
-  // Phase 4: re-swaps after moves
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -816,7 +759,6 @@ function calc(ri){
           br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
         }
         res.blindRes=br;res.enemies=primaryE;res.minFlags=Math.min(...br.map(r=>r.flags));
-        // Insurance: start from normal result, optimize margins
         resIns=optimizeCoreIns(pool,primaryE,res.lanes);
         if(resIns){
           resIns.enemies=primaryE;
@@ -837,7 +779,6 @@ function calc(ri){
         res.robust=calcRobust(res.lanes,enemies);
         res.granular=calcGranular(res.lanes,enemies);
         res.enemies=enemies;
-        // Insurance: start from normal result, optimize margins
         resIns=optimizeCoreIns(pool,enemies,res.lanes);
         if(resIns){
           resIns.enemies=enemies;
@@ -850,7 +791,6 @@ function calc(ri){
       }
       res.lP=res.details.map(d=>calcProb(d));
       res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
-      // Compute robust flags and minMargin for normal result
       let _rf=0,_mm=Infinity;
       for(let i=0;i<3;i++){
         if(res.details[i].won){
@@ -867,13 +807,11 @@ function calc(ri){
       rd.viewMode="normal";
       _calcDone=true;
       renderOur();
-      // Collapse our team and enemy sections after calc
       const ourSec=document.getElementById('ourSec');
       if(ourSec){ourSec.style.display='none';const hdr=ourSec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}}
       const eSec=document.getElementById('enemySec_'+ri);
       if(eSec){eSec.style.display='none';const a=eSec.previousElementSibling?.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}
       _enemyCollapsed=true;
-      // Re-render enemy to apply dimming
       if(rd.mode==='detailed')for(let l=0;l<3;l++) renderEB(ri,l);
       showRes(ri);
     }catch(e){alert("Error: "+e.message);console.error(e);}
@@ -888,7 +826,6 @@ function showRes(ri){
   const c=document.getElementById(`rRes_${ri}`);if(!c)return;
   const hasIns=!!rd.resultIns;
   const vm=rd.viewMode||"normal";
-  // View mode toggle bar
   let h="";
   if(hasIns){
     const btns=[["normal","Normal"],["insurance","🛡 Insurance"],["compare","⚖ Compare"]];
@@ -964,7 +901,6 @@ function hCompare(resN,resI){
   resI.lanes.forEach((lane,l)=>lane.forEach(p=>insLane.set(p.name,l)));
   const moved=new Set([...normLane.keys()].filter(n=>normLane.get(n)!==insLane.get(n)));
 
-  // Summary metrics
   let h=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">`;
   const mkMet=(label,res2)=>{
     const oP=res2.oP||0;
@@ -993,7 +929,6 @@ function hCompare(resN,resI){
   h+=`<span style="background:#e8a000;color:#000;padding:0 4px;border-radius:3px;font-size:9px">moved</span>`;
   h+=`</div>`;
 
-  // Side-by-side lanes
   h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
   for(let col=0;col<2;col++){
     const isIns=col===1;
@@ -1104,7 +1039,6 @@ function doImport(e){
         result:null,resultIns:null,viewMode:"normal"
       });}});
       saveLS();renderRTabs();renderRC();
-      // Expand sections after import
       const sec=document.getElementById('ourSec');
       if(sec){sec.style.display='';const hdr=sec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}}
       alert("Loaded!");
@@ -1140,7 +1074,6 @@ function loadLS(){
     return true;
   }catch(e){return false;}
 }
-// Auto-save via debounced global change listener
 let _saveTimer=null;
 function debounceSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveLS,400);}
 document.addEventListener("change",()=>debounceSave());
@@ -1148,7 +1081,6 @@ document.addEventListener("change",()=>debounceSave());
 // ═══════ INIT ═══════
 const _loaded=loadLS();
 renderOur();renderRTabs();renderRC();
-// Show subtle indicator if data was restored
 if(_loaded){
   const ind=document.createElement("div");
   ind.style.cssText="position:fixed;bottom:12px;right:12px;background:var(--winbg);color:var(--win);font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--win);z-index:99;pointer-events:none";
