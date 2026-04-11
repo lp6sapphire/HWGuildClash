@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Guild Clash Optimizer</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>⚔️</text></svg>">
 <style>
 :root{--bg:#fff;--bg2:#f5f5f0;--tx:#1a1a1a;--tx2:#666;--tx3:#999;--bd:#ddd;--win:#0F6E56;--winbg:rgba(29,158,117,.1);--lose:#A32D2D;--losebg:rgba(226,75,74,.08);--warn:#854F0B;--warnbg:rgba(186,117,23,.12);--mono:Consolas,monospace}
 @media(prefers-color-scheme:dark){:root{--bg:#1a1a1a;--bg2:#252525;--tx:#e0e0e0;--tx2:#aaa;--tx3:#777;--bd:#444}}
@@ -30,10 +29,14 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 .btn{padding:4px 10px;font-size:11px;border:1px solid var(--bd);border-radius:5px;cursor:pointer;background:var(--bg);color:var(--tx);font-family:inherit}
 .btn:hover{background:var(--bg2)}.btn-p{background:var(--win);color:#fff;border-color:var(--win);font-weight:500}
 .btn-d{color:var(--lose);border-color:var(--lose)}
+/* 3 columns for our-team */
 .ogrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;align-items:start}
 .ogrid table{width:100%;border-collapse:collapse;table-layout:fixed}
+.ogr td{padding:2px 2px;border-bottom:1px solid var(--bd);vertical-align:middle;white-space:nowrap}
+.ogr input[type=text]{font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%}
 .onum-i{font-size:10px;padding:2px 3px;text-align:right;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%;font-variant-numeric:tabular-nums}
 .pct-inline{font-size:8px;color:var(--tx3);min-width:20px;text-align:right;display:inline-block;flex-shrink:0}
+.egr{display:grid;grid-template-columns:22px 1fr 70px 22px;gap:1px;align-items:center}
 .bgr{display:grid;grid-template-columns:62px 62px 70px;gap:1px;align-items:center;margin-top:4px}
 .lhdr{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;margin-bottom:4px;flex-wrap:wrap}
 .lhdr.w{background:var(--winbg)}.lhdr.l{background:var(--losebg)}
@@ -42,6 +45,7 @@ input[type=text]{font-size:11px;padding:3px 5px;border:1px solid var(--bd);borde
 .tag{display:inline-block;padding:1px 5px;border-radius:3px;margin:1px;font-size:11px;background:var(--bg)}
 .hidden{display:none}
 #fileInput{display:none}
+
 </style>
 </head>
 <body>
@@ -86,15 +90,22 @@ let aR=0;
 let _calcDone=false;
 let _enemyCollapsed=false;
 
+// ourData starts empty — use Import to load your roster
+
+// ═══════ HELPERS ═══════
 function zf(el){if(el.value==='0')el.value='';}
 function zb(el){if(el.value==='')el.value='0';}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function sortOur(){ourData.sort((a,b)=>b.total-a.total);}
 function clearOurPower(){
   ourData.forEach(p=>{p.atk=0;p.def=0;p.total=0;});
   _calcDone=false;_enemyCollapsed=false;
+  // Expand our team section so user sees reset
   const sec=document.getElementById('ourSec');
-  if(sec&&sec.style.display==='none'){sec.style.display='';const hdr=sec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}}
+  if(sec&&sec.style.display==='none'){
+    sec.style.display='';
+    const hdr=sec.previousElementSibling;
+    if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}
+  }
   renderOur();saveLS();
 }
 function toggleSection(id,header){
@@ -113,15 +124,15 @@ function toggleEnemy(ri,header){
   if(arrow)arrow.style.transform=hidden?'':'rotate(-90deg)';
 }
 
-// ═══════ OUR TEAM ═══════
+// ═══════ OUR TEAM — 3 tables × 10 rows ═══════
 function renderOur(){
   const g=document.getElementById("ourGrid");
-  const anyCalced=rounds.some(r=>r.result);  // FIX#6: per-round check
   const mkTable=(start,end)=>{
     if(start>=ourData.length) return '<table></table>';
     const to=Math.min(end,ourData.length);
     let h=`<table><thead><tr>
-      <th style="width:18px">#</th><th>Name</th>
+      <th style="width:18px">#</th>
+      <th>Name</th>
       <th style="width:72px;text-align:right">Atk</th>
       <th style="width:72px;text-align:right">Def</th>
       <th style="width:62px;text-align:right">Total</th>
@@ -129,23 +140,42 @@ function renderOur(){
     </tr></thead><tbody>`;
     for(let i=start;i<to;i++){
       const p=ourData[i];
-      const isZero=p.total===0&&anyCalced;
+      const isZero=p.total===0&&_calcDone;
       const atkPct=p.total>0&&p.atk>0?Math.round(p.atk/p.total*100):0;
       const defPct=p.total>0&&p.def>0?Math.round(p.def/p.total*100):0;
       h+=`<tr style="${isZero?'opacity:0.35':''}">
         <td style="color:var(--tx3);font-size:9px;text-align:right">${i+1}</td>
-        <td><input type="text" id="our_${i}_name" value="${esc(p.name)}" onchange="ourData[${i}].name=this.value;saveLS()" onkeydown="ourNameEnter(event,${i})" style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
-        <td><div style="display:flex;align-items:center;gap:1px">
-            <input class="onum-i" id="our_${i}_atk" value="${p.atk||0}" onfocus="zf(this);this.select()" onblur="zb(this)" onchange="uOur(${i},'atk',this.value)" onkeydown="ourEnter(event,${i},'atk')" style="flex:1;min-width:0">
-            <span class="pct-inline">${atkPct>0?atkPct+'%':''}</span></div></td>
-        <td><div style="display:flex;align-items:center;gap:1px">
-            <input class="onum-i" id="our_${i}_def" value="${p.def||0}" onfocus="zf(this);this.select()" onblur="zb(this)" onchange="uOur(${i},'def',this.value)" onkeydown="ourEnter(event,${i},'def')" style="flex:1;min-width:0">
-            <span class="pct-inline">${defPct>0?defPct+'%':''}</span></div></td>
-        <td><input class="onum-i" value="${p.total}" onfocus="zf(this);this.select()" onblur="zb(this)" onchange="uOur(${i},'total',this.value)" style="font-weight:600;width:100%"></td>
-        <td><button class="btn btn-d" style="padding:0 3px;font-size:8px;line-height:1.6" onclick="ourData.splice(${i},1);renderOur();saveLS()">×</button></td>
+        <td><input type="text" id="our_${i}_name" value="${p.name}" onchange="ourData[${i}].name=this.value;saveLS()"
+          onkeydown="ourNameEnter(event,${i})"
+          style="font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:var(--bg);color:var(--tx);width:100%"></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:1px">
+            <input class="onum-i" id="our_${i}_atk" value="${p.atk||0}"
+              onfocus="zf(this)" onblur="zb(this)"
+              onchange="uOur(${i},'atk',this.value)"
+              onkeydown="ourEnter(event,${i},'atk')" style="flex:1;min-width:0">
+            <span class="pct-inline">${atkPct>0?atkPct+'%':''}</span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;align-items:center;gap:1px">
+            <input class="onum-i" id="our_${i}_def" value="${p.def||0}"
+              onfocus="zf(this)" onblur="zb(this)"
+              onchange="uOur(${i},'def',this.value)"
+              onkeydown="ourEnter(event,${i},'def')" style="flex:1;min-width:0">
+            <span class="pct-inline">${defPct>0?defPct+'%':''}</span>
+          </div>
+        </td>
+        <td><input class="onum-i" value="${p.total}"
+          onfocus="zf(this)" onblur="zb(this)"
+          onchange="uOur(${i},'total',this.value)"
+          style="font-weight:600;width:100%"></td>
+        <td><button class="btn btn-d" style="padding:0 3px;font-size:8px;line-height:1.6"
+          onclick="ourData.splice(${i},1);renderOur()">×</button></td>
       </tr>`;
     }
-    return h+`</tbody></table>`;
+    h+=`</tbody></table>`;
+    return h;
   };
   g.innerHTML=mkTable(0,10)+mkTable(10,20)+mkTable(20,30);
   const active=ourData.filter(p=>p.total>0).length;
@@ -153,35 +183,40 @@ function renderOur(){
   if(ct)ct.textContent=`(${active} of ${ourData.length} in calc)`;
 }
 
+// Enter navigation: atk[i] → def[i] → atk[i+1] → def[i+1] → ...
+// pendingFocus: set by ourEnter, consumed by renderOur after DOM rebuild
 let _pendingFocus=null;
 function ourNameEnter(e,i){
-  if(e.key!=='Enter')return;e.preventDefault();
+  if(e.key!=='Enter')return;
+  e.preventDefault();
   const ni=(i+1)%ourData.length;
   const el=document.getElementById(`our_${ni}_name`);
   if(el){el.focus();el.select();}
 }
 function ourEnter(e,i,field){
-  if(e.key!=='Enter')return;e.preventDefault();
+  if(e.key!=='Enter')return;
+  e.preventDefault();
   let ni=i,nf=field;
-  if(field==='atk'){nf='def';}else{nf='atk';ni=(i+1)%ourData.length;}
+  if(field==='atk'){nf='def';}
+  else{nf='atk';ni=(i+1)%ourData.length;}
   _pendingFocus=`our_${ni}_${nf}`;
+  // trigger onchange manually so value is saved before re-render
   const inp=document.getElementById(`our_${i}_${field}`);
-  if(inp) uOur(i,field,inp.value);
+  if(inp) uOur(i,field,inp.value); // this calls renderOur which consumes _pendingFocus
 }
-let _uOurLock=false;
+
+// uOur — NO auto-sort, sort only via button
 function uOur(i,f,v){
   v=parseInt(v)||0;
-  if(_uOurLock)return; // block re-entrant calls from onchange during renderOur
-  const changed=ourData[i][f]!==v||(f!=="total"&&ourData[i].total!==(ourData[i].atk||0)+(ourData[i].def||0));
-  if(changed){
-    ourData[i][f]=v;
-    if(f!=="total") ourData[i].total=(ourData[i].atk||0)+(ourData[i].def||0);
-    _uOurLock=true;
-    renderOur();
-    _uOurLock=false;
-    saveLS();
+  ourData[i][f]=v;
+  if(f!=="total") ourData[i].total=(ourData[i].atk||0)+(ourData[i].def||0);
+  renderOur();
+  saveLS();
+  if(_pendingFocus){
+    const el=document.getElementById(_pendingFocus);
+    if(el){el.focus();el.select();}
+    _pendingFocus=null;
   }
-  if(_pendingFocus){const el=document.getElementById(_pendingFocus);if(el){el.focus();el.select();}_pendingFocus=null;}
 }
 function addOur(){ourData.push({name:"",atk:0,def:0,total:0});renderOur();saveLS();}
 
@@ -196,6 +231,7 @@ function renderRC(){
   const c=document.getElementById("rContent"),rd=rounds[aR];let h="";
   h+=`<div style="margin-bottom:8px"><label style="font-size:11px;cursor:pointer"><input type="checkbox" ${rd.mode==="blind"?"checked":""} onchange="rounds[${aR}].mode=this.checked?'blind':'detailed';renderRTabs();renderRC()"> Blind mode</label></div>`;
 
+  // Collapsible enemy header
   const eCol=_enemyCollapsed;
   h+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer" onclick="toggleEnemy(${aR},this)">
     <span class="collapse-arrow" style="font-size:10px;transition:transform .2s${eCol?';transform:rotate(-90deg)':''}">▼</span>
@@ -209,26 +245,24 @@ function renderRC(){
       h+=`<div class="card"><b style="font-size:12px">${LN[l]}</b>
         <div class="bgr"><div style="font-size:10px;color:var(--tx2)">Attack</div><div style="font-size:10px;color:var(--tx2)">Defense</div><div style="font-size:10px;color:var(--tx2)">Total</div></div>
         <div class="bgr">
-          <input class="num" id="bA_${aR}_${l}" value="${rd.bA[l]}" onfocus="zf(this);this.select()" placeholder="—" onchange="rounds[${aR}].bA[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'A')">
-          <input class="num" id="bD_${aR}_${l}" value="${rd.bD[l]}" onfocus="zf(this);this.select()" placeholder="—" onchange="rounds[${aR}].bD[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'D')">
-          <input class="num" id="bT_${aR}_${l}" value="${rd.bT[l]}" onfocus="zf(this);this.select()" onchange="rounds[${aR}].bT[${l}]=this.value" style="font-weight:600" onkeydown="blindEnter(event,${aR},${l},'T')">
+          <input class="num" id="bA_${aR}_${l}" value="${rd.bA[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bA[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'A')">
+          <input class="num" id="bD_${aR}_${l}" value="${rd.bD[l]}" onfocus="zf(this)" placeholder="—" onchange="rounds[${aR}].bD[${l}]=this.value;updBlindTotal(${aR},${l})" onkeydown="blindEnter(event,${aR},${l},'D')">
+          <input class="num" id="bT_${aR}_${l}" value="${rd.bT[l]}" onfocus="zf(this)" onchange="rounds[${aR}].bT[${l}]=this.value" style="font-weight:600" onkeydown="blindEnter(event,${aR},${l},'T')">
         </div>
         <div style="font-size:10px;color:var(--tx2);margin-top:4px">Players</div>
-        <input class="num" id="bC_${aR}_${l}" value="${rd.bC[l]}" onfocus="zf(this);this.select()" onblur="zb(this)" onchange="rounds[${aR}].bC[${l}]=this.value" style="width:60px" onkeydown="blindEnter(event,${aR},${l},'C')">
+        <input class="num" id="bC_${aR}_${l}" value="${rd.bC[l]}" onfocus="zf(this)" onblur="zb(this)" onchange="rounds[${aR}].bC[${l}]=this.value" style="width:60px" onkeydown="blindEnter(event,${aR},${l},'C')">
       </div>`;
     }
     h+=`</div>`;
   } else {
+    // Detailed mode — card style matching blind mode, stats on top, players below
     h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">`;
     for(let l=0;l<3;l++){
       const eTot=rounds[aR].enemy[l].reduce((s,p)=>s+(p.power||0),0);
-      const cnt=rounds[aR].enemy[l].length;
       h+=`<div class="card" style="padding:8px" data-ri="${aR}" data-l="${l}">
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
           <b style="font-size:12px">${LN[l]}</b>
-          <span style="font-size:10px;color:var(--tx3)">(${cnt}/10)</span>
           <span style="flex:1"></span>
-          <button class="btn" style="font-size:9px;padding:1px 6px" onclick="sortEnemyAsc(${aR},${l})">↕</button>
           <button class="btn" style="font-size:9px;padding:1px 5px" onclick="clearEnemyLane(${aR},${l})">🗑</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:2px">
@@ -237,17 +271,22 @@ function renderRC(){
           <div style="font-size:9px;color:var(--tx2)">Total</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:8px">
-          <input class="num" id="eA_${aR}_${l}" value="${rd.eA[l]}" onfocus="zf(this);this.select()" placeholder="—" onchange="rounds[${aR}].eA[${l}]=this.value" onkeydown="enemyNavEnter(event,${aR},${l},'atk')">
-          <input class="num" id="eD_${aR}_${l}" value="${rd.eD[l]}" onfocus="zf(this);this.select()" placeholder="—" onchange="rounds[${aR}].eD[${l}]=this.value" onkeydown="enemyNavEnter(event,${aR},${l},'def')">
+          <input class="num" id="eA_${aR}_${l}" value="${rd.eA[l]}" onfocus="zf(this)" placeholder="—"
+            onchange="rounds[${aR}].eA[${l}]=this.value"
+            onkeydown="enemyNavEnter(event,${aR},${l},'atk')">
+          <input class="num" id="eD_${aR}_${l}" value="${rd.eD[l]}" onfocus="zf(this)" placeholder="—"
+            onchange="rounds[${aR}].eD[${l}]=this.value"
+            onkeydown="enemyNavEnter(event,${aR},${l},'def')">
           <div id="eTotal_${aR}_${l}" class="num" style="font-weight:600;background:var(--bg2);text-align:right;padding:3px 5px;border-radius:4px;border:1px solid var(--bd)">${eTot>0?eTot.toLocaleString():'—'}</div>
         </div>
         <div style="border-top:1px solid var(--bd);padding-top:6px">
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
             <span style="font-size:9px;color:var(--tx2)">Players</span>
-            <button class="btn" style="font-size:10px;padding:0 8px;line-height:1.7;color:var(--win);border-color:var(--win)" onclick="addE(${aR},${l})">+</button>
+            <button class="btn" style="font-size:10px;padding:0 8px;line-height:1.7;color:var(--win);border-color:var(--win)"
+              onclick="addE(${aR},${l})">+</button>
           </div>
           <table style="font-size:10px;width:100%"><thead><tr>
-            <th style="width:18px;font-weight:400;color:var(--tx3)">#</th>
+            <th style="width:14px;font-weight:400;color:var(--tx3)">#</th>
             <th style="text-align:right;font-weight:400;color:var(--tx3)">Power</th>
             <th style="width:18px"></th>
           </tr></thead>
@@ -257,7 +296,7 @@ function renderRC(){
     }
     h+=`</div>`;
   }
-  h+=`</div>`;
+  h+=`</div>`; // close enemySec
 
   h+=`<button class="btn btn-p" style="padding:8px 20px;width:100%;margin-bottom:8px" onclick="calc(${aR})" id="cBtn_${aR}">Calculate round ${aR+1}</button>`;
   h+=`<div id="rRes_${aR}"></div>`;
@@ -268,91 +307,118 @@ function renderRC(){
 }
 
 function updBlindTotal(ri,l){
-  const a=parseInt(rounds[ri].bA[l])||0,d=parseInt(rounds[ri].bD[l])||0;
+  const a=parseInt(rounds[ri].bA[l])||0, d=parseInt(rounds[ri].bD[l])||0;
   if(a||d){rounds[ri].bT[l]=String(a+d);const el=document.getElementById(`bT_${ri}_${l}`);if(el)el.value=rounds[ri].bT[l];}
 }
 
-// ═══════ DRAG-AND-DROP ═══════
-let _drag=null;
+// ═══════ DRAG-AND-DROP STATE ═══════
+let _drag=null; // {ri, fromLane, fromIdx, player}
 
 function renderEB(ri,l){
   const b=document.getElementById(`eB_${ri}_${l}`);if(!b)return;b.innerHTML="";
-  const roundCalced=!!rounds[ri].result;  // FIX#6: per-round dimming
   rounds[ri].enemy[l].forEach((p,i)=>{
+    p.name=LN[l]+"_"+(i+1);
     const tr=document.createElement("tr");
     tr.draggable=true;
     tr.dataset.ri=ri;tr.dataset.l=l;tr.dataset.i=i;
     tr.style.cursor="grab";
-    if(roundCalced&&p.power===0)tr.style.opacity="0.35";
-    // FIX#3: numbered rows
+    if(_calcDone&&p.power===0)tr.style.opacity="0.35";
     tr.innerHTML=`
-      <td style="color:var(--tx3);font-size:9px;width:18px;text-align:right;user-select:none">${i+1}</td>
+      <td style="color:var(--tx3);font-size:9px;width:14px;text-align:right;user-select:none">⠿</td>
       <td style="padding:1px 2px"><input class="num" id="ep_${ri}_${l}_${i}" value="${p.power}"
         style="font-size:10px;padding:2px 4px;width:100%"
-        onfocus="zf(this);this.select()" onblur="zb(this)"
+        onfocus="zf(this)" onblur="zb(this)"
         onchange="uEnemy(${ri},${l},${i},this.value)"
         onkeydown="enemyEnter(event,${ri},${l},${i})"></td>
       <td style="width:18px;padding:1px 1px"><button class="btn btn-d"
         style="padding:0 3px;font-size:9px;line-height:1.5"
-        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l});saveLS()">×</button></td>`;
+        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);sortEnemyAsc(${ri},${l});renderEB(${ri},${l});saveLS()">×</button></td>`;
+    // drag events
     tr.addEventListener("dragstart",e=>{
       _drag={ri:+tr.dataset.ri,fromLane:+tr.dataset.l,fromIdx:+tr.dataset.i,
              player:{...rounds[+tr.dataset.ri].enemy[+tr.dataset.l][+tr.dataset.i]}};
-      tr.style.opacity="0.4";e.dataTransfer.effectAllowed="move";
+      tr.style.opacity="0.4";
+      e.dataTransfer.effectAllowed="move";
     });
     tr.addEventListener("dragend",()=>{tr.style.opacity="";_drag=null;});
     b.appendChild(tr);
   });
 
+  // Make the whole card a drop zone (works even when lane is empty)
+  // Use a marker to avoid adding duplicate listeners on re-render
   const card=b.closest(".card");
   if(card&&!card._dropBound){
     card._dropBound=true;
     card.addEventListener("dragover",e=>{
       if(!_drag||_drag.ri!==+card.dataset.ri||_drag.fromLane===+card.dataset.l)return;
-      e.preventDefault();e.dataTransfer.dropEffect="move";card.style.outline="2px solid var(--win)";
+      e.preventDefault();e.dataTransfer.dropEffect="move";
+      card.style.outline="2px solid var(--win)";
     });
-    card.addEventListener("dragleave",e=>{if(!card.contains(e.relatedTarget))card.style.outline="";});
+    card.addEventListener("dragleave",e=>{
+      if(!card.contains(e.relatedTarget))card.style.outline="";
+    });
     card.addEventListener("drop",e=>{
-      e.preventDefault();card.style.outline="";
+      e.preventDefault();
+      card.style.outline="";
       const cri=+card.dataset.ri,cl=+card.dataset.l;
       if(!_drag||_drag.ri!==cri||_drag.fromLane===cl)return;
-      if(rounds[cri].enemy[cl].length>=10)return;  // FIX#2: cap on drop too
       const {fromLane,fromIdx,player}=_drag;
       rounds[cri].enemy[fromLane].splice(fromIdx,1);
       rounds[cri].enemy[cl].push(player);
-      renderEB(cri,fromLane);renderEB(cri,cl);saveLS();
+      sortEnemyAsc(cri,fromLane);
+      sortEnemyAsc(cri,cl);
+      renderEB(cri,fromLane);
+      renderEB(cri,cl);
+      saveLS();
     });
   }
+
   updEnemyTotal(ri,l);
 }
 
-// FIX#1: enemyEnter — uEnemy no longer rebuilds DOM, so focus just works
 function enemyEnter(e,ri,l,i){
-  if(e.key!=='Enter')return;e.preventDefault();
-  const cur=document.getElementById(`ep_${ri}_${l}_${i}`);
-  if(cur) uEnemy(ri,l,i,cur.value);
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  e.target.dispatchEvent(new Event('change'));
+  // Next player in same lane
   const next=document.getElementById(`ep_${ri}_${l}_${i+1}`);
   if(next){next.focus();next.select();return;}
+  // Last player → atk of next lane (wraps around)
   const nl=(l+1)%3;
   const nA=document.getElementById(`eA_${ri}_${nl}`);
   if(nA){nA.focus();nA.select();}
 }
+// Enemy Atk/Def Enter: atk→def→first player→...→next lane atk
 function enemyNavEnter(e,ri,l,field){
-  if(e.key!=='Enter')return;e.preventDefault();
+  if(e.key!=='Enter')return;
+  e.preventDefault();
   e.target.dispatchEvent(new Event('change'));
-  if(field==='atk'){const d=document.getElementById(`eD_${ri}_${l}`);if(d){d.focus();d.select();}}
-  else{
+  if(field==='atk'){
+    const d=document.getElementById(`eD_${ri}_${l}`);
+    if(d){d.focus();d.select();}
+  }else{
+    // def → first player
     const p0=document.getElementById(`ep_${ri}_${l}_0`);
     if(p0){p0.focus();p0.select();}
-    else{const nl=(l+1)%3;const nA=document.getElementById(`eA_${ri}_${nl}`);if(nA){nA.focus();nA.select();}}
+    else{
+      // No players → next lane atk
+      const nl=(l+1)%3;
+      const nA=document.getElementById(`eA_${ri}_${nl}`);
+      if(nA){nA.focus();nA.select();}
+    }
   }
 }
+
+// Blind mode Enter: A→D→T→C→next lane A→D→T→C→...
 function blindEnter(e,ri,l,field){
-  if(e.key!=='Enter')return;e.preventDefault();
+  if(e.key!=='Enter')return;
+  e.preventDefault();
   e.target.dispatchEvent(new Event('change'));
-  const order=['A','D','T','C'];const ci=order.indexOf(field);
-  let nl=l,nf;
-  if(ci<order.length-1){nf=order[ci+1];}else{nl=(l+1)%3;nf=order[0];}
+  const order=['A','D','T','C'];
+  const ci=order.indexOf(field);
+  let nl=l, nf;
+  if(ci<order.length-1){nf=order[ci+1];}
+  else{nl=(l+1)%3;nf=order[0];}
   const prefix=nf==='C'?'bC':'b'+nf;
   const el=document.getElementById(`${prefix}_${ri}_${nl}`);
   if(el){el.focus();el.select();}
@@ -364,24 +430,21 @@ function updEnemyTotal(ri,l){
   if(el) el.textContent=tot>0?tot.toLocaleString():'—';
 }
 
-// FIX#1+4+5: uEnemy does NOT sort and does NOT rebuild DOM — just updates value
+function sortEnemyAsc(ri,l){rounds[ri].enemy[l].sort((a,b)=>a.power-b.power);}
 function uEnemy(ri,l,i,v){
   rounds[ri].enemy[l][i].power=parseInt(v)||0;
+  sortEnemyAsc(ri,l);
+  renderEB(ri,l);
   updEnemyTotal(ri,l);
   saveLS();
 }
-// FIX#5: sort only via button (ascending, min→max)
-function sortEnemyAsc(ri,l){
-  rounds[ri].enemy[l].sort((a,b)=>a.power-b.power);
-  renderEB(ri,l);saveLS();
+function sortEnemy(ri,l){
+  rounds[ri].enemy[l].sort((a,b)=>b.power-a.power);
+  renderEB(ri,l);
+  saveLS();
 }
-// FIX#2: cap at 10 players per lane
-function addE(ri,l){
-  if(rounds[ri].enemy[l].length>=10)return;
-  rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});
-  renderEB(ri,l);saveLS();
-}
-function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);saveLS();}
+function addE(ri,l){rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
+function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
 
 // ═══════ CORE: SIMULATION ═══════
 function simDetail(team,enemy){
@@ -403,6 +466,7 @@ function simDetail(team,enemy){
   }
   while(oi<our.length){of2++;ow++;last="us";fights.push({our:our[oi],enemy:null,winner:"us",margin:0,pct:0});if(of2>=2){oi++;of2=0;}}
   while(ei<es.length){ef++;ew++;last="them";fights.push({our:null,enemy:es[ei],winner:"them",margin:0,pct:0});if(ef>=2){ei++;ef=0;}}
+  // Empty enemy lane → auto win
   if(es.length===0&&our.length>0)last="us";
   return{won:last==="us",ow,ew,fights,minMW,risky};
 }
@@ -410,7 +474,7 @@ function evaluate(lanes,enemies){let flags=0,wins=0,risk=0,details=[];for(let i=
 function calcProb(d){if(!d.won)return 0;let p=1;for(const f of d.fights){if(!f.our||!f.enemy)continue;if(f.winner==="us"&&f.pct<RISK)p*=.5+(f.pct/RISK)*.5;}return p;}
 function isBetter(f,w,r,bf,bw,br){return f>bf||(f===bf&&w>bw)||(f===bf&&w===bw&&r<br);}
 
-// ═══════ SHARED: HEURISTIC PHASE ═══════
+// ═══════ SHARED: HEURISTIC PHASE (4 sacrifice strategies × 6 split strategies) ═══════
 function _heurPhase(pool,enemies,n,desc,asc,tryC){
   for(let sac=0;sac<3;sac++){
     const wl=[0,1,2].filter(i=>i!==sac);
@@ -418,39 +482,50 @@ function _heurPhase(pool,enemies,n,desc,asc,tryC){
       const nr=n-ns;
       for(let n1=Math.max(1,nr-10);n1<=Math.min(10,nr-1);n1++){
         const n2=nr-n1;if(n2<1||n2>10)continue;
+        // 4 sacrifice selection strategies
         const sacSets=[];
+        // A: weakest ns players
         sacSets.push(asc.slice(0,ns));
+        // B: middle players
         if(ns>0&&ns<=n-2){const mid=Math.floor((n-ns)/2);const ms=[...desc].slice(mid,mid+ns);if(ms.length===ns)sacSets.push(ms);}
+        // C: enemy-aware — players who beat fewest enemies on win lanes
         if(ns>0){
           const eW0=[...enemies[wl[0]]].sort((a,b)=>a.power-b.power);
           const eW1=[...enemies[wl[1]]].sort((a,b)=>a.power-b.power);
           const scored=pool.map(p=>({...p,_v:eW0.filter(e=>p.power>e.power).length+eW1.filter(e=>p.power>e.power).length})).sort((a,b)=>a._v-b._v);
           sacSets.push(scored.slice(0,ns));
         }
+        // D: flag-impact — greedy removal: remove players whose absence doesn't flip the flag
         if(ns>0&&ns<=10){
-          const allPool=[...pool];const removed=[];
+          const allPool=[...pool];
+          const removed=[];
           for(let k=0;k<ns;k++){
             let bestRm=null,bestScore=-1;
             for(let j=0;j<allPool.length;j++){
               if(removed.some(r=>r.name===allPool[j].name))continue;
               const cand=allPool.filter((p,ci)=>ci!==j&&!removed.some(r=>r.name===p.name));
+              // Quick check: split cand into two groups and count flags
               const half=Math.ceil(cand.length/2);
               const t1=cand.slice(0,Math.min(10,half)),t2=cand.slice(Math.max(0,cand.length-Math.min(10,cand.length-half)));
               const f1=simDetail(t1,enemies[wl[0]]).won?1:0;
               const f2=simDetail(t2,enemies[wl[1]]).won?1:0;
               const score=f1+f2;
-              if(score>bestScore||(score===bestScore&&allPool[j].power<(bestRm?bestRm.power:Infinity))){bestScore=score;bestRm=allPool[j];}
+              if(score>bestScore||(score===bestScore&&allPool[j].power<(bestRm?bestRm.power:Infinity))){
+                bestScore=score;bestRm=allPool[j];
+              }
             }
             if(bestRm)removed.push(bestRm);
           }
           if(removed.length===ns)sacSets.push(removed);
         }
+        // Deduplicate sacrifice sets
         const seen=new Set();
         for(const sacT of sacSets){
           const key=sacT.map(p=>p.name).sort().join(',');
           if(seen.has(key))continue;seen.add(key);
           const rem=pool.filter(p=>!sacT.some(s=>s.name===p.name)).sort((a,b)=>b.power-a.power);
           if(rem.length!==nr)continue;
+          // 6 split strategies for remaining players
           const mk=fn=>{let a=[],b=[];fn(rem,a,b,n1,n2);return[a,b];};
           const e1=[...enemies[wl[0]]].sort((x,y)=>x.power-y.power);
           const e2=[...enemies[wl[1]]].sort((x,y)=>x.power-y.power);
@@ -477,8 +552,11 @@ function optimizeCore(pool,enemies){
   const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
   let bF=0,bW=0,bR=999,bL=null;
   const tryC=lanes=>{const r=evaluate(lanes,enemies);if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;bL=lanes.map(l=>[...l]);}};
+
   _heurPhase(pool,enemies,n,desc,asc,tryC);
   if(!bL)return null;
+
+  // Phase 2: 1-on-1 swap optimization
   const lanes=bL.map(l=>[...l]);
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
@@ -490,6 +568,8 @@ function optimizeCore(pool,enemies){
       }
     if(!imp)break;
   }
+
+  // Phase 3: 2-on-2 swap optimization
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
@@ -502,11 +582,15 @@ function optimizeCore(pool,enemies){
         }
     if(!imp)break;
   }
+
+  // Phase 4: move optimization — move 1 player between lanes (changes lane sizes)
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
-      if(la===lb)continue;if(lanes[la].length<=1||lanes[lb].length>=10)continue;
+      if(la===lb)continue;
+      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
-        const p=lanes[la].splice(i,1)[0];lanes[lb].push(p);
+        const p=lanes[la].splice(i,1)[0];
+        lanes[lb].push(p);
         const r=evaluate(lanes,enemies);
         if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
         else{lanes[lb].pop();lanes[la].splice(i,0,p);}
@@ -514,6 +598,8 @@ function optimizeCore(pool,enemies){
     }
     if(!imp)break;
   }
+
+  // Phase 5: re-run swaps after moves may have changed lane sizes
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -524,17 +610,21 @@ function optimizeCore(pool,enemies){
       }
     if(!imp)break;
   }
+
   const fin=evaluate(lanes,enemies);
   return{flags:fin.flags,wins:fin.wins,risk:fin.risk,lanes:lanes.map(l=>[...l]),details:fin.details};
 }
 
+// ═══════ ROBUSTNESS ═══════
 function calcRobust(lanes,enemies){
   const all=[...enemies[0],...enemies[1],...enemies[2]].sort((a,b)=>b.power-a.power);
+  // Groups of 10 — max players per lane in game rules
   const eG=[all.slice(0,10),all.slice(10,20),all.slice(20)];
   const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],gn=["TL","ML","BL"];
   return perms.map(p=>{const el=[eG[p[0]],eG[p[1]],eG[p[2]]];const r=evaluate(lanes,el);return{label:`${gn[p[0]]}→${gn[p[1]]}→${gn[p[2]]}`,...r};});
 }
 
+// ═══════ GRANULAR ═══════
 function calcGranular(lanes,enemies){
   const all=[...enemies[0],...enemies[1],...enemies[2]].sort((a,b)=>b.power-a.power);
   const top5=all.slice(0,5),res=[];
@@ -542,7 +632,8 @@ function calcGranular(lanes,enemies){
     const oL=enemies.findIndex(l=>l.some(p=>p.name===pl.name));if(oL<0)continue;
     for(let tgt=0;tgt<3;tgt++){
       if(tgt===oL)continue;
-      const ne=enemies.map(l=>[...l]);if(ne[tgt].length===0)continue;
+      const ne=enemies.map(l=>[...l]);
+      if(ne[tgt].length===0)continue; // guard for empty lane
       const wI=ne[tgt].reduce((mi,p,i,a)=>p.power<a[mi].power?i:mi,0);
       const sw=ne[tgt][wI];
       ne[oL]=ne[oL].filter(p=>p.name!==pl.name);ne[oL].push(sw);ne[tgt][wI]=pl;
@@ -553,59 +644,100 @@ function calcGranular(lanes,enemies){
   return res;
 }
 
+// ═══════ BLIND ═══════
 function genEst(total,count,label){
-  if(count<=0)return[];if(count===1)return[{name:`${label}_1`,power:Math.round(total)}];
+  if(count<=0)return[];
+  if(count===1)return[{name:`${label}_1`,power:Math.round(total)}];
   const ws=[];for(let i=0;i<count;i++)ws.push(.5+i/(count-1));const wS=ws.reduce((a,b)=>a+b,0);
   return ws.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/wS)}));
 }
 function genScen(total,count,label){
-  if(count<=0)return[];const avg=total/count,sc=[];
+  if(count<=0)return[];
+  const avg=total/count,sc=[];
+  // uniform — always safe
   sc.push({name:"uniform",players:Array.from({length:count},(_,i)=>({name:`${label}_${i+1}`,power:Math.round(avg)}))});
-  if(count>=2){const lw=[];for(let i=0;i<count;i++)lw.push(.5+i/(count-1));const lwS=lw.reduce((a,b)=>a+b,0);sc.push({name:"linear",players:lw.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/lwS)}))});}
-  if(count>=2){const tp=avg*1.8,rp=(total-tp)/(count-1),th=[];for(let i=0;i<count-1;i++)th.push({name:`${label}_${i+1}`,power:Math.round(rp)});th.push({name:`${label}_boss`,power:Math.round(tp)});sc.push({name:"1strong",players:th});}
-  if(count>=3){const t1=avg*1.6,t2=avg*1.4,rp2=(total-t1-t2)/(count-2),ts=[];for(let i=0;i<count-2;i++)ts.push({name:`${label}_${i+1}`,power:Math.round(rp2)});ts.push({name:`${label}_sub`,power:Math.round(t2)});ts.push({name:`${label}_boss`,power:Math.round(t1)});sc.push({name:"2strong",players:ts});}
+  // linear — needs count>=2
+  if(count>=2){
+    const lw=[];for(let i=0;i<count;i++)lw.push(.5+i/(count-1));const lwS=lw.reduce((a,b)=>a+b,0);
+    sc.push({name:"linear",players:lw.map((w,i)=>({name:`${label}_${i+1}`,power:Math.round(total*w/lwS)}))});
+  }
+  // 1strong — needs count>=2
+  if(count>=2){
+    const tp=avg*1.8,rp=(total-tp)/(count-1),th=[];
+    for(let i=0;i<count-1;i++)th.push({name:`${label}_${i+1}`,power:Math.round(rp)});
+    th.push({name:`${label}_boss`,power:Math.round(tp)});
+    sc.push({name:"1strong",players:th});
+  }
+  // 2strong — needs count>=3
+  if(count>=3){
+    const t1=avg*1.6,t2=avg*1.4,rp2=(total-t1-t2)/(count-2),ts=[];
+    for(let i=0;i<count-2;i++)ts.push({name:`${label}_${i+1}`,power:Math.round(rp2)});
+    ts.push({name:`${label}_sub`,power:Math.round(t2)});
+    ts.push({name:`${label}_boss`,power:Math.round(t1)});
+    sc.push({name:"2strong",players:ts});
+  }
   return sc;
 }
 
 // ═══════ INSURANCE: MARGIN-BASED ═══════
+// Starts from normal result, then tries to THICKEN thin wins.
+// Scores by: robustFlags → flags → minMargin → wins
+// This means it prefers layouts where the weakest winning fight has the biggest margin.
 const INS_UPSETS=1;
 
 function laneRobust(team,enemy,nUpsets){
-  const sim=simDetail(team,enemy);if(!sim.won)return false;
+  const sim=simDetail(team,enemy);
+  if(!sim.won)return false;
   const realWins=sim.fights.filter(f=>f.our&&f.enemy&&f.winner==='us').sort((a,b)=>a.margin-b.margin);
   if(realWins.length<=nUpsets)return false;
   const toRemove=new Set(realWins.slice(0,nUpsets).map(f=>f.our.name));
-  return simDetail(team.filter(p=>!toRemove.has(p.name)),enemy).won;
+  const reducedTeam=team.filter(p=>!toRemove.has(p.name));
+  return simDetail(reducedTeam,enemy).won;
 }
 
 function evaluateIns(lanes,enemies,nUpsets){
-  const base=evaluate(lanes,enemies);let robustFlags=0,minMargin=Infinity;
-  for(let i=0;i<3;i++){if(base.details[i].won){
-    if(laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
-    for(const f of base.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us')){if(f.margin<minMargin)minMargin=f.margin;}
-  }}
-  return{...base,robustFlags,minMargin:minMargin===Infinity?0:minMargin};
+  const base=evaluate(lanes,enemies);
+  let robustFlags=0, minMargin=Infinity;
+  for(let i=0;i<3;i++){
+    if(base.details[i].won){
+      if(laneRobust(lanes[i],enemies[i],nUpsets))robustFlags++;
+      // Find minimum margin across all real winning fights
+      const realWins=base.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us');
+      for(const f of realWins){if(f.margin<minMargin)minMargin=f.margin;}
+    }
+  }
+  if(minMargin===Infinity)minMargin=0;
+  return{...base,robustFlags,minMargin};
 }
 
+// Priority: robustFlags → flags → minMargin (HIGHER=better) → wins
 function isBetterIns(rf,f,mm,w,brf,bf,bmm,bw){
   if(rf>brf)return true;if(rf<brf)return false;
   if(f>bf)return true;if(f<bf)return false;
   if(mm>bmm)return true;if(mm<bmm)return false;
-  return w>bw;
+  if(w>bw)return true;
+  return false;
 }
 
+// Insurance starts from NORMAL result and re-optimizes with margin-aware scoring
 function optimizeCoreIns(pool,enemies,normalLanes){
+  // Start from normal result if available, otherwise from scratch
   let lanes;
-  if(normalLanes){lanes=normalLanes.map(l=>[...l]);}
-  else{
+  if(normalLanes){
+    lanes=normalLanes.map(l=>[...l]);
+  }else{
     const n=pool.length,desc=[...pool].sort((a,b)=>b.power-a.power),asc=[...pool].sort((a,b)=>a.power-b.power);
     let bL=null,bRF=0,bF=0,bMM=0,bW=0;
     const tryC=la=>{const r=evaluateIns(la,enemies,INS_UPSETS);if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;bL=la.map(l=>[...l]);}};
     _heurPhase(pool,enemies,n,desc,asc,tryC);
-    if(!bL)return null;lanes=bL.map(l=>[...l]);
+    if(!bL)return null;
+    lanes=bL.map(l=>[...l]);
   }
+
   let cur=evaluateIns(lanes,enemies,INS_UPSETS);
   let bRF=cur.robustFlags,bF=cur.flags,bMM=cur.minMargin,bW=cur.wins;
+
+  // Phase 1: 1-on-1 swaps optimizing margins
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -616,6 +748,8 @@ function optimizeCoreIns(pool,enemies,normalLanes){
       }
     if(!imp)break;
   }
+
+  // Phase 2: 2-on-2 swaps
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
@@ -628,11 +762,15 @@ function optimizeCoreIns(pool,enemies,normalLanes){
         }
     if(!imp)break;
   }
+
+  // Phase 3: moves
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
-      if(la===lb)continue;if(lanes[la].length<=1||lanes[lb].length>=10)continue;
+      if(la===lb)continue;
+      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
-        const p=lanes[la].splice(i,1)[0];lanes[lb].push(p);
+        const p=lanes[la].splice(i,1)[0];
+        lanes[lb].push(p);
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
         if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{lanes[lb].pop();lanes[la].splice(i,0,p);}
@@ -640,6 +778,8 @@ function optimizeCoreIns(pool,enemies,normalLanes){
     }
     if(!imp)break;
   }
+
+  // Phase 4: re-swaps after moves
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
@@ -650,6 +790,7 @@ function optimizeCoreIns(pool,enemies,normalLanes){
       }
     if(!imp)break;
   }
+
   const fin=evaluateIns(lanes,enemies,INS_UPSETS);
   return{flags:fin.flags,wins:fin.wins,risk:fin.risk,robustFlags:fin.robustFlags,minMargin:fin.minMargin,lanes:lanes.map(l=>[...l]),details:fin.details};
 }
@@ -670,31 +811,69 @@ function calc(ri){
         if(!res){alert("No solution found");btn.textContent="Calculate";btn.disabled=false;return;}
         const sp=totals.map((t,i)=>genScen(t,counts[i],LN[i]));
         const br=[];
-        for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){const r=evaluate(res.lanes,[s0.players,s1.players,s2.players]);br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});}
+        for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){
+          const r=evaluate(res.lanes,[s0.players,s1.players,s2.players]);
+          br.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
+        }
         res.blindRes=br;res.enemies=primaryE;res.minFlags=Math.min(...br.map(r=>r.flags));
+        // Insurance: start from normal result, optimize margins
         resIns=optimizeCoreIns(pool,primaryE,res.lanes);
-        if(resIns){resIns.enemies=primaryE;resIns.lP=resIns.details.map(d=>calcProb(d));resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);
-          const brI=[];for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){const r=evaluate(resIns.lanes,[s0.players,s1.players,s2.players]);brI.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});}
-          resIns.blindRes=brI;resIns.minFlags=Math.min(...brI.map(r=>r.flags));resIns._m="blind";}
+        if(resIns){
+          resIns.enemies=primaryE;
+          resIns.lP=resIns.details.map(d=>calcProb(d));
+          resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);
+          const brI=[];
+          for(const s0 of sp[0])for(const s1 of sp[1])for(const s2 of sp[2]){
+            const r=evaluate(resIns.lanes,[s0.players,s1.players,s2.players]);
+            brI.push({label:`${s0.name}/${s1.name}/${s2.name}`,...r});
+          }
+          resIns.blindRes=brI;resIns.minFlags=Math.min(...brI.map(r=>r.flags));
+          resIns._m="blind";
+        }
       }else{
         const enemies=rd.enemy.map(l=>l.filter(p=>p.power>0));
         res=optimizeCore(pool,enemies);
         if(!res){alert("No solution found");btn.textContent=`Calculate round ${ri+1}`;btn.disabled=false;return;}
-        res.robust=calcRobust(res.lanes,enemies);res.granular=calcGranular(res.lanes,enemies);res.enemies=enemies;
+        res.robust=calcRobust(res.lanes,enemies);
+        res.granular=calcGranular(res.lanes,enemies);
+        res.enemies=enemies;
+        // Insurance: start from normal result, optimize margins
         resIns=optimizeCoreIns(pool,enemies,res.lanes);
-        if(resIns){resIns.enemies=enemies;resIns.lP=resIns.details.map(d=>calcProb(d));resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);resIns.robust=calcRobust(resIns.lanes,enemies);resIns.granular=calcGranular(resIns.lanes,enemies);resIns._m="detailed";}
+        if(resIns){
+          resIns.enemies=enemies;
+          resIns.lP=resIns.details.map(d=>calcProb(d));
+          resIns.oP=resIns.lP.reduce((a,b)=>a*(b||1),1);
+          resIns.robust=calcRobust(resIns.lanes,enemies);
+          resIns.granular=calcGranular(resIns.lanes,enemies);
+          resIns._m="detailed";
+        }
       }
-      res.lP=res.details.map(d=>calcProb(d));res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
+      res.lP=res.details.map(d=>calcProb(d));
+      res.oP=res.lP.reduce((a,b)=>a*(b||1),1);
+      // Compute robust flags and minMargin for normal result
       let _rf=0,_mm=Infinity;
-      for(let i=0;i<3;i++){if(res.details[i].won){if(laneRobust(res.lanes[i],res.enemies[i],INS_UPSETS))_rf++;for(const f of res.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us')){if(f.margin<_mm)_mm=f.margin;}}}
-      res.robustFlags=_rf;res.minMargin=_mm===Infinity?0:_mm;res._m=rd.mode;
-      rd.result=res;rd.resultIns=resIns;rd.viewMode="normal";
-      _calcDone=true;renderOur();
+      for(let i=0;i<3;i++){
+        if(res.details[i].won){
+          if(laneRobust(res.lanes[i],res.enemies[i],INS_UPSETS))_rf++;
+          const rw=res.details[i].fights.filter(f=>f.our&&f.enemy&&f.winner==='us');
+          for(const f of rw){if(f.margin<_mm)_mm=f.margin;}
+        }
+      }
+      res.robustFlags=_rf;
+      res.minMargin=_mm===Infinity?0:_mm;
+      res._m=rd.mode;
+      rd.result=res;
+      rd.resultIns=resIns;
+      rd.viewMode="normal";
+      _calcDone=true;
+      renderOur();
+      // Collapse our team and enemy sections after calc
       const ourSec=document.getElementById('ourSec');
       if(ourSec){ourSec.style.display='none';const hdr=ourSec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}}
       const eSec=document.getElementById('enemySec_'+ri);
       if(eSec){eSec.style.display='none';const a=eSec.previousElementSibling?.querySelector('.collapse-arrow');if(a)a.style.transform='rotate(-90deg)';}
       _enemyCollapsed=true;
+      // Re-render enemy to apply dimming
       if(rd.mode==='detailed')for(let l=0;l<3;l++) renderEB(ri,l);
       showRes(ri);
     }catch(e){alert("Error: "+e.message);console.error(e);}
@@ -704,20 +883,39 @@ function calc(ri){
 
 // ═══════ RENDER RESULT ═══════
 function showRes(ri){
-  const rd=rounds[ri],res=rd.result;if(!res)return;
+  const rd=rounds[ri];
+  const res=rd.result;if(!res)return;
   const c=document.getElementById(`rRes_${ri}`);if(!c)return;
-  const hasIns=!!rd.resultIns,vm=rd.viewMode||"normal";
+  const hasIns=!!rd.resultIns;
+  const vm=rd.viewMode||"normal";
+  // View mode toggle bar
   let h="";
-  if(hasIns){const btns=[["normal","Normal"],["insurance","🛡 Insurance"],["compare","⚖ Compare"]];
-    h+=`<div style="display:flex;gap:5px;margin-bottom:8px">${btns.map(([id,label])=>`<button class="btn${vm===id?' btn-p':''}" style="font-size:11px" onclick="setView(${ri},'${id}')">${label}</button>`).join("")}</div>`;}
-  h+=`<div id="rResInner_${ri}"></div>`;c.innerHTML=h;showMode(ri,vm);
+  if(hasIns){
+    const btns=[["normal","Normal"],["insurance","🛡 Insurance"],["compare","⚖ Compare"]];
+    h+=`<div style="display:flex;gap:5px;margin-bottom:8px">`;
+    btns.forEach(([id,label])=>{
+      const on=vm===id;
+      h+=`<button class="btn${on?' btn-p':''}" style="font-size:11px" onclick="setView(${ri},'${id}')">${label}</button>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div id="rResInner_${ri}"></div>`;
+  c.innerHTML=h;
+  showMode(ri,vm);
 }
-function setView(ri,mode){rounds[ri].viewMode=mode;showRes(ri);}
+
+function setView(ri,mode){
+  rounds[ri].viewMode=mode;
+  showRes(ri);
+}
 
 function showMode(ri,vm){
   const rd=rounds[ri],res=rd.result,resIns=rd.resultIns;
   const inner=document.getElementById(`rResInner_${ri}`);if(!inner)return;
-  if(vm==="compare"&&resIns){inner.innerHTML=hCompare(res,resIns);return;}
+  if(vm==="compare"&&resIns){
+    inner.innerHTML=hCompare(res,resIns);
+    return;
+  }
   const r=(vm==="insurance"&&resIns)?resIns:res;
   const isD=r._m==="detailed";
   const items=[
@@ -727,13 +925,18 @@ function showMode(ri,vm){
     {l:"Reliability",v:Math.round(r.oP*100)+"%",c:r.oP>.9?"var(--win)":r.oP>.7?"var(--warn)":"var(--lose)"}
   ];
   if(!isD&&r.minFlags!==undefined)items.push({l:"Min fl.",v:r.minFlags,c:r.minFlags>=2?"var(--win)":"var(--warn)"});
-  if(r.robustFlags!==undefined)items.push({l:"🛡 Robust",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
-  if(r.minMargin!==undefined)items.push({l:"Thin win",v:r.minMargin+"K",c:r.minMargin>50?"var(--win)":r.minMargin>20?"var(--warn)":"var(--lose)"});
+  if(r.robustFlags!==undefined){
+    items.push({l:"🛡 Robust",v:r.robustFlags+"/3",c:r.robustFlags>=2?"var(--win)":"var(--warn)"});
+  }
+  if(r.minMargin!==undefined){
+    items.push({l:"Thin win",v:r.minMargin+"K",c:r.minMargin>50?"var(--win)":r.minMargin>20?"var(--warn)":"var(--lose)"});
+  }
   let h=`<div class="metrics">${items.map(i=>`<div class="metric"><small>${i.l}</small><b${i.c?' style="color:'+i.c+'"':''}>${i.v}</b></div>`).join("")}</div>`;
   const tabs=isD?["Fights","Robustness","Fine swaps","Lineups"]:["Fights","Scenarios","Lineups"];
   const suffix=vm==="insurance"?"I":"N";
   h+=`<div class="tabs" id="st_${ri}_${suffix}">${tabs.map((t,i)=>`<button class="tab${i===0?' on':''}" onclick="showSub(${ri},${i},'${vm}')">${t}</button>`).join("")}</div><div id="sc_${ri}_${suffix}"></div>`;
-  inner.innerHTML=h;showSub(ri,0,vm);
+  inner.innerHTML=h;
+  showSub(ri,0,vm);
 }
 
 function showSub(ri,idx,vm){
@@ -741,7 +944,9 @@ function showSub(ri,idx,vm){
   const suffix=vm==="insurance"?"I":"N";
   document.querySelectorAll(`#st_${ri}_${suffix} .tab`).forEach((t,i)=>t.classList.toggle("on",i===idx));
   const c=document.getElementById(`sc_${ri}_${suffix}`);if(!c)return;
-  const r=(vm==="insurance"&&rounds[ri].resultIns)?rounds[ri].resultIns:rounds[ri].result;
+  const rd=rounds[ri];
+  const resIns=rd.resultIns;
+  const r=(vm==="insurance"&&resIns)?resIns:rd.result;
   const isD=r._m==="detailed";
   const names=isD?["fights","robust","granular","lineups"]:["fights","scenarios","lineups"];
   const id=names[idx];
@@ -758,24 +963,61 @@ function hCompare(resN,resI){
   resN.lanes.forEach((lane,l)=>lane.forEach(p=>normLane.set(p.name,l)));
   resI.lanes.forEach((lane,l)=>lane.forEach(p=>insLane.set(p.name,l)));
   const moved=new Set([...normLane.keys()].filter(n=>normLane.get(n)!==insLane.get(n)));
+
+  // Summary metrics
   let h=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">`;
-  const mkMet=(label,res2)=>{const oP=res2.oP||0;let m=`<div class="card" style="padding:8px"><div style="font-size:11px;font-weight:600;margin-bottom:5px">${label}</div><div style="display:flex;gap:4px;flex-wrap:wrap">`;
-    for(let l=0;l<3;l++){const d=res2.details[l];m+=`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--${d.won?'winbg':'losebg'});color:var(--${d.won?'win':'lose'})">${LN[l]} ${d.ow}:${d.ew}</span>`;}
-    m+=`</div><div style="font-size:10px;margin-top:4px;color:var(--tx2)">Flags <b style="color:var(--${res2.flags>=2?'win':'warn'})">${res2.flags}/3</b> · Wins <b>${res2.wins}</b> · Rel. <b style="color:var(--${oP>.9?'win':oP>.7?'warn':'lose'})">${Math.round(oP*100)}%</b>${res2.robustFlags!==undefined?' · Robust <b>'+res2.robustFlags+'/3</b>':''}</div></div>`;return m;};
-  h+=mkMet("Normal",resN)+mkMet("🛡 Insurance",resI)+`</div>`;
-  if(moved.size===0)return h+`<div style="background:var(--winbg);border-radius:8px;padding:10px;font-size:11px;color:var(--win)">✅ Both assignments are identical — insurance confirms the normal plan.</div>`;
-  h+=`<div style="font-size:10px;color:var(--tx2);margin-bottom:8px"><b style="color:#e8a000">${moved.size} player(s) reassigned</b> between Normal and Insurance. <span style="background:#e8a000;color:#000;padding:0 4px;border-radius:3px;font-size:9px">moved</span></div>`;
+  const mkMet=(label,res2)=>{
+    const oP=res2.oP||0;
+    let m=`<div class="card" style="padding:8px"><div style="font-size:11px;font-weight:600;margin-bottom:5px">${label}</div>`;
+    m+=`<div style="display:flex;gap:4px;flex-wrap:wrap">`;
+    for(let l=0;l<3;l++){
+      const d=res2.details[l];
+      m+=`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--${d.won?'winbg':'losebg'});color:var(--${d.won?'win':'lose'})">${LN[l]} ${d.ow}:${d.ew}</span>`;
+    }
+    m+=`</div>`;
+    m+=`<div style="font-size:10px;margin-top:4px;color:var(--tx2)">Flags <b style="color:var(--${res2.flags>=2?'win':'warn'})">${res2.flags}/3</b> · Wins <b>${res2.wins}</b> · Rel. <b style="color:var(--${oP>.9?'win':oP>.7?'warn':'lose'})">${Math.round(oP*100)}%</b>${res2.robustFlags!==undefined?' · Robust <b>'+res2.robustFlags+'/3</b>':''}</div>`;
+    m+=`</div>`;
+    return m;
+  };
+  h+=mkMet("Normal",resN);
+  h+=mkMet("🛡 Insurance",resI);
+  h+=`</div>`;
+
+  if(moved.size===0){
+    h+=`<div style="background:var(--winbg);border-radius:8px;padding:10px;font-size:11px;color:var(--win)">✅ Both assignments are identical — insurance confirms the normal plan.</div>`;
+    return h;
+  }
+
+  h+=`<div style="font-size:10px;color:var(--tx2);margin-bottom:8px">`;
+  h+=`<b style="color:#e8a000">${moved.size} player(s) reassigned</b> between Normal and Insurance. `;
+  h+=`<span style="background:#e8a000;color:#000;padding:0 4px;border-radius:3px;font-size:9px">moved</span>`;
+  h+=`</div>`;
+
+  // Side-by-side lanes
   h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
   for(let col=0;col<2;col++){
-    const isIns=col===1,label=isIns?"🛡 Insurance":"Normal",res2=isIns?resI:resN;
+    const isIns=col===1;
+    const label=isIns?"🛡 Insurance":"Normal";
+    const res2=isIns?resI:resN;
     h+=`<div><div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bd)">${label}</div>`;
-    for(let l=0;l<3;l++){const won=res2.details[l].won,laneTotal=res2.lanes[l].reduce((s,p)=>s+p.power,0);
-      h+=`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--${won?'win':'lose'});margin-bottom:3px">${won?'🏴':'❌'} ${LN[l]} · ${laneTotal.toLocaleString()}</div><div style="line-height:1.9">`;
-      [...res2.lanes[l]].sort((a,b)=>b.power-a.power).forEach(p=>{const isMoved=moved.has(p.name);const bg=isMoved?"background:#e8a000;color:#000":"";const tc=isMoved?"color:rgba(0,0,0,0.55)":"color:var(--tx3)";
-        h+=`<span class="tag" style="${bg};margin:1px 2px">${p.name} <span style="${tc};font-size:9px">${Math.round(p.power)}K</span></span>`;});
-      h+=`</div></div>`;}
-    h+=`</div>`;}
-  return h+`</div>`;
+    for(let l=0;l<3;l++){
+      const won=res2.details[l].won;
+      const laneTotal=res2.lanes[l].reduce((s,p)=>s+p.power,0);
+      h+=`<div style="margin-bottom:10px">`;
+      h+=`<div style="font-size:11px;font-weight:500;color:var(--${won?'win':'lose'});margin-bottom:3px">${won?'🏴':'❌'} ${LN[l]} · ${laneTotal.toLocaleString()}</div>`;
+      h+=`<div style="line-height:1.9">`;
+      [...res2.lanes[l]].sort((a,b)=>b.power-a.power).forEach(p=>{
+        const isMoved=moved.has(p.name);
+        const bg=isMoved?"background:#e8a000;color:#000":"";
+        const tc=isMoved?"color:rgba(0,0,0,0.55)":"color:var(--tx3)";
+        h+=`<span class="tag" style="${bg};margin:1px 2px">${p.name} <span style="${tc};font-size:9px">${Math.round(p.power)}K</span></span>`;
+      });
+      h+=`</div></div>`;
+    }
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  return h;
 }
 
 // ═══════ HTML HELPERS ═══════
@@ -795,7 +1037,7 @@ function hFights(res){
     h+=`<table><thead><tr><th style="width:20px;text-align:right">#</th><th style="text-align:right">Ours</th><th style="text-align:center;width:22px">vs</th><th>Enemy</th><th style="width:105px">Result</th></tr></thead><tbody>`;
     d.fights.forEach((f,i)=>{
       const last=i===d.fights.length-1,w=f.winner==="us",auto=!f.our||!f.enemy,close=!auto&&f.pct<RISK;
-      const bg=last?"var(--warnbg)":(close?(w?"rgba(250,238,216,.3)":"rgba(252,235,235,.3)"):"");
+      const bg=last?"var(--warnbg)":(close?(w?"rgba(250,238,218,.3)":"rgba(252,235,235,.3)"):"");
       h+=`<tr${bg?` style="background:${bg}"`:''}>`;
       h+=`<td style="color:var(--tx3);text-align:right">${i+1}</td>`;
       h+=`<td style="text-align:right">${f.our?f.our.name+' ('+Math.round(f.our.power)+'K)':''}</td>`;
@@ -814,21 +1056,26 @@ function hTable(data,label){
   if(!data||!data.length)return`<div style="color:var(--tx2)">No data</div>`;
   const sorted=[...data].sort((a,b)=>a.flags-b.flags||a.wins-b.wins);
   let h=`<div style="font-size:12px;color:var(--tx2);margin-bottom:6px">${label}</div><table><thead><tr><th>Scenario</th><th style="text-align:center">Fl</th><th style="text-align:center">Wins</th><th style="text-align:center">TL</th><th style="text-align:center">ML</th><th style="text-align:center">BL</th><th>Result</th></tr></thead><tbody>`;
-  for(const r of sorted){const bg=r.flags<2?"var(--losebg)":"";
+  for(const r of sorted){
+    const bg=r.flags<2?"var(--losebg)":"";
     h+=`<tr${bg?` style="background:${bg}"`:''}>`;
     h+=`<td style="font-size:10px">${r.label}${r.swap?` <span style="color:var(--tx3)">${r.swap}</span>`:''}</td>`;
     h+=`<td style="text-align:center;font-weight:500">${r.flags}</td><td style="text-align:center">${r.wins}</td>`;
     for(let l=0;l<3;l++)h+=`<td style="text-align:center;color:var(--${r.details[l].won?'win':'lose'});font-weight:500;font-size:10px">${r.details[l].won?'🏴':'❌'}${r.details[l].ow}:${r.details[l].ew}</td>`;
-    h+=`<td style="font-weight:500;font-size:10px;color:var(--${r.flags>=2?'win':r.flags===1?'warn':'lose'})">${r.flags>=2?'✅':r.flags===1?'🤝':'❌'}</td></tr>`;}
+    h+=`<td style="font-weight:500;font-size:10px;color:var(--${r.flags>=2?'win':r.flags===1?'warn':'lose'})">${r.flags>=2?'✅':r.flags===1?'🤝':'❌'}</td></tr>`;
+  }
   h+=`</tbody></table>`;
   const w=data.filter(r=>r.flags>=2).length,d2=data.filter(r=>r.flags===1).length,lo=data.filter(r=>r.flags===0).length;
-  return h+`<div style="font-size:10px;color:var(--tx2);margin-top:4px">✅${w} 🤝${d2} ❌${lo} of ${data.length}</div>`;
+  h+=`<div style="font-size:10px;color:var(--tx2);margin-top:4px">✅${w} 🤝${d2} ❌${lo} of ${data.length}</div>`;
+  return h;
 }
 function hLineups(res){
   let h="";
-  for(let i=0;i<3;i++){const team=[...res.lanes[i]].sort((a,b)=>a.power-b.power),won=res.details[i].won;
+  for(let i=0;i<3;i++){
+    const team=[...res.lanes[i]].sort((a,b)=>a.power-b.power),won=res.details[i].won;
     h+=`<div class="card"><div style="font-weight:500;margin-bottom:3px;color:var(--${won?'win':'lose'});font-size:12px">${won?'🏴':'❌'} ${LN[i]} (${team.length})</div>`;
-    h+=`<div style="line-height:1.7">${team.map(p=>`<span class="tag">${p.name} <span style="color:var(--tx3)">${Math.round(p.power)}K</span></span>`).join("")}</div></div>`;}
+    h+=`<div style="line-height:1.7">${team.map(p=>`<span class="tag">${p.name} <span style="color:var(--tx3)">${Math.round(p.power)}K</span></span>`).join("")}</div></div>`;
+  }
   h+=`<div class="cbox">${[0,1,2].map(i=>{const t=[...res.lanes[i]].sort((a,b)=>a.power-b.power);return`${LN[i]}: ${t.map(p=>p.name).join(", ")}`;}).join("\n")}</div>`;
   return h;
 }
@@ -848,8 +1095,16 @@ function doImport(e){
     try{
       const d=JSON.parse(ev.target.result);
       if(d.ourData){ourData=d.ourData;_calcDone=false;_enemyCollapsed=false;renderOur();}
-      if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR){Object.assign(rounds[i],{mode:r.mode||"detailed",enemy:r.enemy||[[],[],[]],bT:r.bT||["","",""],bC:r.bC||["10","10","10"],bA:r.bA||["","",""],bD:r.bD||["","",""],eA:r.eA||["","",""],eD:r.eD||["","",""],result:null,resultIns:null,viewMode:"normal"});}});
+      if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR){Object.assign(rounds[i],{
+        mode:r.mode||"detailed",
+        enemy:r.enemy||[[],[],[]],
+        bT:r.bT||["","",""],bC:r.bC||["10","10","10"],
+        bA:r.bA||["","",""],bD:r.bD||["","",""],
+        eA:r.eA||["","",""],eD:r.eD||["","",""],
+        result:null,resultIns:null,viewMode:"normal"
+      });}});
       saveLS();renderRTabs();renderRC();
+      // Expand sections after import
       const sec=document.getElementById('ourSec');
       if(sec){sec.style.display='';const hdr=sec.previousElementSibling;if(hdr){const a=hdr.querySelector('.collapse-arrow');if(a)a.style.transform='';}}
       alert("Loaded!");
@@ -860,11 +1115,32 @@ function doImport(e){
 
 // ═══════ LOCALSTORAGE AUTO-SAVE ═══════
 const LS_KEY="gco_v1";
-function saveLS(){try{localStorage.setItem(LS_KEY,JSON.stringify({ourData,rounds:rounds.map(r=>({mode:r.mode,enemy:r.enemy,bT:r.bT,bC:r.bC,bA:r.bA,bD:r.bD,eA:r.eA,eD:r.eD}))}));}catch(e){}}
-function loadLS(){try{const raw=localStorage.getItem(LS_KEY);if(!raw)return false;const d=JSON.parse(raw);
-  if(d.ourData)ourData=d.ourData;
-  if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR)Object.assign(rounds[i],{mode:r.mode||"detailed",enemy:r.enemy||[[],[],[]],bT:r.bT||["","",""],bC:r.bC||["10","10","10"],bA:r.bA||["","",""],bD:r.bD||["","",""],eA:r.eA||["","",""],eD:r.eD||["","",""],result:null,resultIns:null,viewMode:"normal"});});
-  return true;}catch(e){return false;}}
+function saveLS(){
+  try{
+    const data={ourData,rounds:rounds.map(r=>({
+      mode:r.mode,enemy:r.enemy,
+      bT:r.bT,bC:r.bC,bA:r.bA,bD:r.bD,eA:r.eA,eD:r.eD
+    }))};
+    localStorage.setItem(LS_KEY,JSON.stringify(data));
+  }catch(e){}
+}
+function loadLS(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);if(!raw)return false;
+    const d=JSON.parse(raw);
+    if(d.ourData)ourData=d.ourData;
+    if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR)Object.assign(rounds[i],{
+      mode:r.mode||"detailed",
+      enemy:r.enemy||[[],[],[]],
+      bT:r.bT||["","",""],bC:r.bC||["10","10","10"],
+      bA:r.bA||["","",""],bD:r.bD||["","",""],
+      eA:r.eA||["","",""],eD:r.eD||["","",""],
+      result:null,resultIns:null,viewMode:"normal"
+    });});
+    return true;
+  }catch(e){return false;}
+}
+// Auto-save via debounced global change listener
 let _saveTimer=null;
 function debounceSave(){clearTimeout(_saveTimer);_saveTimer=setTimeout(saveLS,400);}
 document.addEventListener("change",()=>debounceSave());
@@ -872,7 +1148,14 @@ document.addEventListener("change",()=>debounceSave());
 // ═══════ INIT ═══════
 const _loaded=loadLS();
 renderOur();renderRTabs();renderRC();
-if(_loaded){const ind=document.createElement("div");ind.style.cssText="position:fixed;bottom:12px;right:12px;background:var(--winbg);color:var(--win);font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--win);z-index:99;pointer-events:none";ind.textContent="✓ Data restored";document.body.appendChild(ind);setTimeout(()=>ind.remove(),2500);}
+// Show subtle indicator if data was restored
+if(_loaded){
+  const ind=document.createElement("div");
+  ind.style.cssText="position:fixed;bottom:12px;right:12px;background:var(--winbg);color:var(--win);font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--win);z-index:99;pointer-events:none";
+  ind.textContent="✓ Data restored";
+  document.body.appendChild(ind);
+  setTimeout(()=>ind.remove(),2500);
+}
 </script>
 </body>
 </html>
