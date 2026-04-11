@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<link rel="icon" href="favicon.ico" type="image/x-icon">
 <title>Guild Clash Optimizer</title>
 <style>
 :root{--bg:#fff;--bg2:#f5f5f0;--tx:#1a1a1a;--tx2:#666;--tx3:#999;--bd:#ddd;--win:#0F6E56;--winbg:rgba(29,158,117,.1);--lose:#A32D2D;--losebg:rgba(226,75,74,.08);--warn:#854F0B;--warnbg:rgba(186,117,23,.12);--mono:Consolas,monospace}
@@ -449,6 +450,11 @@ function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
 // ═══════ CORE: SIMULATION ═══════
 function simDetail(team,enemy){
   const our=[...team].sort((a,b)=>a.power-b.power),es=[...enemy].sort((a,b)=>a.power-b.power);
+  // Empty enemy lane: each player wins once, no gorka
+  if(es.length===0){
+    const fights=our.map(p=>({our:p,enemy:null,winner:"us",margin:0,pct:0}));
+    return{won:our.length>0,ow:our.length,ew:0,fights,minMW:Infinity,risky:0};
+  }
   let oi=0,ei=0,of2=0,ef=0,ow=0,ew=0,last=null;
   const fights=[];let minMW=Infinity,risky=0;
   while(oi<our.length&&ei<es.length){
@@ -464,10 +470,8 @@ function simDetail(team,enemy){
       oi++;of2=0;if(ef>=2){ei++;ef=0;}
     }
   }
-  while(oi<our.length){of2++;ow++;last="us";fights.push({our:our[oi],enemy:null,winner:"us",margin:0,pct:0});if(of2>=2){oi++;of2=0;}}
-  while(ei<es.length){ef++;ew++;last="them";fights.push({our:null,enemy:es[ei],winner:"them",margin:0,pct:0});if(ef>=2){ei++;ef=0;}}
-  // Empty enemy lane → auto win
-  if(es.length===0&&our.length>0)last="us";
+  while(oi<our.length){ow++;last="us";fights.push({our:our[oi],enemy:null,winner:"us",margin:0,pct:0});oi++;of2=0;}
+  while(ei<es.length){ew++;last="them";fights.push({our:null,enemy:es[ei],winner:"them",margin:0,pct:0});ei++;ef=0;}
   return{won:last==="us",ow,ew,fights,minMW,risky};
 }
 function evaluate(lanes,enemies){let flags=0,wins=0,risk=0,details=[];for(let i=0;i<3;i++){const r=simDetail(lanes[i],enemies[i]);if(r.won)flags++;wins+=r.ow;risk+=r.risky;details.push(r);}return{flags,wins,risk,details};}
@@ -476,47 +480,59 @@ function isBetter(f,w,r,bf,bw,br){return f>bf||(f===bf&&w>bw)||(f===bf&&w===bw&&
 
 // ═══════ SHARED: HEURISTIC PHASE (4 sacrifice strategies × 6 split strategies) ═══════
 function _heurPhase(pool,enemies,n,desc,asc,tryC){
-  for(let sac=0;sac<3;sac++){
+  // Detect empty enemy lanes — force sacrifice there with minimum players
+  const emptyLanes=enemies.map((e,i)=>e.length===0?i:-1).filter(i=>i>=0);
+  const sacList=emptyLanes.length>0?emptyLanes:[0,1,2];
+
+  for(const sac of sacList){
     const wl=[0,1,2].filter(i=>i!==sac);
-    for(let ns=0;ns<=Math.min(n-2,10);ns++){
+    const isEmptySac=enemies[sac].length===0;
+
+    // For empty sac lane: fix ns to minimum (max battle lanes at 10 each)
+    const nsMin=isEmptySac?Math.max(1,n-20):0;
+    const nsMax=isEmptySac?Math.max(1,n-20):Math.min(n-2,10);
+
+    for(let ns=nsMin;ns<=nsMax;ns++){
       const nr=n-ns;
       for(let n1=Math.max(1,nr-10);n1<=Math.min(10,nr-1);n1++){
         const n2=nr-n1;if(n2<1||n2>10)continue;
-        // 4 sacrifice selection strategies
+
+        // For empty sac lane: only use weakest players (strategy A)
         const sacSets=[];
         // A: weakest ns players
         sacSets.push(asc.slice(0,ns));
-        // B: middle players
-        if(ns>0&&ns<=n-2){const mid=Math.floor((n-ns)/2);const ms=[...desc].slice(mid,mid+ns);if(ms.length===ns)sacSets.push(ms);}
-        // C: enemy-aware — players who beat fewest enemies on win lanes
-        if(ns>0){
-          const eW0=[...enemies[wl[0]]].sort((a,b)=>a.power-b.power);
-          const eW1=[...enemies[wl[1]]].sort((a,b)=>a.power-b.power);
-          const scored=pool.map(p=>({...p,_v:eW0.filter(e=>p.power>e.power).length+eW1.filter(e=>p.power>e.power).length})).sort((a,b)=>a._v-b._v);
-          sacSets.push(scored.slice(0,ns));
-        }
-        // D: flag-impact — greedy removal: remove players whose absence doesn't flip the flag
-        if(ns>0&&ns<=10){
-          const allPool=[...pool];
-          const removed=[];
-          for(let k=0;k<ns;k++){
-            let bestRm=null,bestScore=-1;
-            for(let j=0;j<allPool.length;j++){
-              if(removed.some(r=>r.name===allPool[j].name))continue;
-              const cand=allPool.filter((p,ci)=>ci!==j&&!removed.some(r=>r.name===p.name));
-              // Quick check: split cand into two groups and count flags
-              const half=Math.ceil(cand.length/2);
-              const t1=cand.slice(0,Math.min(10,half)),t2=cand.slice(Math.max(0,cand.length-Math.min(10,cand.length-half)));
-              const f1=simDetail(t1,enemies[wl[0]]).won?1:0;
-              const f2=simDetail(t2,enemies[wl[1]]).won?1:0;
-              const score=f1+f2;
-              if(score>bestScore||(score===bestScore&&allPool[j].power<(bestRm?bestRm.power:Infinity))){
-                bestScore=score;bestRm=allPool[j];
-              }
-            }
-            if(bestRm)removed.push(bestRm);
+        if(!isEmptySac){
+          // B: middle players
+          if(ns>0&&ns<=n-2){const mid=Math.floor((n-ns)/2);const ms=[...desc].slice(mid,mid+ns);if(ms.length===ns)sacSets.push(ms);}
+          // C: enemy-aware — players who beat fewest enemies on win lanes
+          if(ns>0){
+            const eW0=[...enemies[wl[0]]].sort((a,b)=>a.power-b.power);
+            const eW1=[...enemies[wl[1]]].sort((a,b)=>a.power-b.power);
+            const scored=pool.map(p=>({...p,_v:eW0.filter(e=>p.power>e.power).length+eW1.filter(e=>p.power>e.power).length})).sort((a,b)=>a._v-b._v);
+            sacSets.push(scored.slice(0,ns));
           }
-          if(removed.length===ns)sacSets.push(removed);
+          // D: flag-impact — greedy removal
+          if(ns>0&&ns<=10){
+            const allPool=[...pool];
+            const removed=[];
+            for(let k=0;k<ns;k++){
+              let bestRm=null,bestScore=-1;
+              for(let j=0;j<allPool.length;j++){
+                if(removed.some(r=>r.name===allPool[j].name))continue;
+                const cand=allPool.filter((p,ci)=>ci!==j&&!removed.some(r=>r.name===p.name));
+                const half=Math.ceil(cand.length/2);
+                const t1=cand.slice(0,Math.min(10,half)),t2=cand.slice(Math.max(0,cand.length-Math.min(10,cand.length-half)));
+                const f1=simDetail(t1,enemies[wl[0]]).won?1:0;
+                const f2=simDetail(t2,enemies[wl[1]]).won?1:0;
+                const score=f1+f2;
+                if(score>bestScore||(score===bestScore&&allPool[j].power<(bestRm?bestRm.power:Infinity))){
+                  bestScore=score;bestRm=allPool[j];
+                }
+              }
+              if(bestRm)removed.push(bestRm);
+            }
+            if(removed.length===ns)sacSets.push(removed);
+          }
         }
         // Deduplicate sacrifice sets
         const seen=new Set();
@@ -556,22 +572,28 @@ function optimizeCore(pool,enemies){
   _heurPhase(pool,enemies,n,desc,asc,tryC);
   if(!bL)return null;
 
+  // Detect empty enemy lanes — never swap/move players there
+  const _emptyL=new Set(enemies.map((e,i)=>e.length===0?i:-1).filter(i=>i>=0));
+
   // Phase 2: 1-on-1 swap optimization
   const lanes=bL.map(l=>[...l]);
   for(let round=0;round<10;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluate(lanes,enemies);
         if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
+    }
     if(!imp)break;
   }
 
   // Phase 3: 2-on-2 swap optimization
   for(let round=0;round<3;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
         for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
           [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
@@ -580,6 +602,7 @@ function optimizeCore(pool,enemies){
           if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
           else{[lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];[lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];}
         }
+    }
     if(!imp)break;
   }
 
@@ -587,6 +610,7 @@ function optimizeCore(pool,enemies){
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
+      if(_emptyL.has(lb))continue; // never move TO empty lane
       if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
         const p=lanes[la].splice(i,1)[0];
@@ -601,13 +625,15 @@ function optimizeCore(pool,enemies){
 
   // Phase 5: re-run swaps after moves may have changed lane sizes
   for(let round=0;round<5;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluate(lanes,enemies);
         if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
+    }
     if(!imp)break;
   }
 
@@ -686,6 +712,7 @@ function genScen(total,count,label){
 const INS_UPSETS=1;
 
 function laneRobust(team,enemy,nUpsets){
+  if(enemy.length===0)return true;
   const sim=simDetail(team,enemy);
   if(!sim.won)return false;
   const realWins=sim.fights.filter(f=>f.our&&f.enemy&&f.winner==='us').sort((a,b)=>a.margin-b.margin);
@@ -737,21 +764,27 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   let cur=evaluateIns(lanes,enemies,INS_UPSETS);
   let bRF=cur.robustFlags,bF=cur.flags,bMM=cur.minMargin,bW=cur.wins;
 
+  // Detect empty enemy lanes — never swap/move players there
+  const _emptyL=new Set(enemies.map((e,i)=>e.length===0?i:-1).filter(i=>i>=0));
+
   // Phase 1: 1-on-1 swaps optimizing margins
   for(let round=0;round<10;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
         if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
+    }
     if(!imp)break;
   }
 
   // Phase 2: 2-on-2 swaps
   for(let round=0;round<3;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
         for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
           [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
@@ -760,6 +793,7 @@ function optimizeCoreIns(pool,enemies,normalLanes){
           if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
           else{[lanes[la][i2],lanes[lb][j2]]=[lanes[lb][j2],lanes[la][i2]];[lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];}
         }
+    }
     if(!imp)break;
   }
 
@@ -767,6 +801,7 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
+      if(_emptyL.has(lb))continue; // never move TO empty lane
       if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
         const p=lanes[la].splice(i,1)[0];
@@ -781,13 +816,15 @@ function optimizeCoreIns(pool,enemies,normalLanes){
 
   // Phase 4: re-swaps after moves
   for(let round=0;round<5;round++){let imp=false;
-    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++)
+    for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
+      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
         if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
         else{[lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];}
       }
+    }
     if(!imp)break;
   }
 
