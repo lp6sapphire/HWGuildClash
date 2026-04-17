@@ -363,6 +363,7 @@ function renderEB(ri,l){
       card.style.outline="";
       const cri=+card.dataset.ri,cl=+card.dataset.l;
       if(!_drag||_drag.ri!==cri||_drag.fromLane===cl)return;
+      if(rounds[cri].enemy[cl].length>=10)return;
       const {fromLane,fromIdx,player}=_drag;
       rounds[cri].enemy[fromLane].splice(fromIdx,1);
       rounds[cri].enemy[cl].push(player);
@@ -444,7 +445,7 @@ function sortEnemy(ri,l){
   renderEB(ri,l);
   saveLS();
 }
-function addE(ri,l){rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
+function addE(ri,l){if(rounds[ri].enemy[l].length>=10)return;rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
 function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
 
 // ═══════ CORE: SIMULATION ═══════
