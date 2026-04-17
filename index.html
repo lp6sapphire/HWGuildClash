@@ -264,6 +264,7 @@ function renderRC(){
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
           <b style="font-size:12px">${LN[l]}</b>
           <span style="flex:1"></span>
+          <button class="btn" style="font-size:9px;padding:1px 6px" onclick="sortEnemyAsc(${aR},${l});renderEB(${aR},${l});saveLS()">↕</button>
           <button class="btn" style="font-size:9px;padding:1px 5px" onclick="clearEnemyLane(${aR},${l})">🗑</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:2px">
@@ -333,7 +334,7 @@ function renderEB(ri,l){
         onkeydown="enemyEnter(event,${ri},${l},${i})"></td>
       <td style="width:18px;padding:1px 1px"><button class="btn btn-d"
         style="padding:0 3px;font-size:9px;line-height:1.5"
-        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);sortEnemyAsc(${ri},${l});renderEB(${ri},${l});saveLS()">×</button></td>`;
+        onclick="rounds[${ri}].enemy[${l}].splice(${i},1);renderEB(${ri},${l});saveLS()">×</button></td>`;
     // drag events
     tr.addEventListener("dragstart",e=>{
       _drag={ri:+tr.dataset.ri,fromLane:+tr.dataset.l,fromIdx:+tr.dataset.i,
@@ -367,8 +368,6 @@ function renderEB(ri,l){
       const {fromLane,fromIdx,player}=_drag;
       rounds[cri].enemy[fromLane].splice(fromIdx,1);
       rounds[cri].enemy[cl].push(player);
-      sortEnemyAsc(cri,fromLane);
-      sortEnemyAsc(cri,cl);
       renderEB(cri,fromLane);
       renderEB(cri,cl);
       saveLS();
@@ -435,8 +434,6 @@ function updEnemyTotal(ri,l){
 function sortEnemyAsc(ri,l){rounds[ri].enemy[l].sort((a,b)=>a.power-b.power);}
 function uEnemy(ri,l,i,v){
   rounds[ri].enemy[l][i].power=parseInt(v)||0;
-  sortEnemyAsc(ri,l);
-  renderEB(ri,l);
   updEnemyTotal(ri,l);
   saveLS();
 }
@@ -445,7 +442,7 @@ function sortEnemy(ri,l){
   renderEB(ri,l);
   saveLS();
 }
-function addE(ri,l){if(rounds[ri].enemy[l].length>=10)return;rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});sortEnemyAsc(ri,l);renderEB(ri,l);}
+function addE(ri,l){if(rounds[ri].enemy[l].length>=10)return;rounds[ri].enemy[l].push({name:LN[l]+"_"+(rounds[ri].enemy[l].length+1),power:0});renderEB(ri,l);}
 function clearEnemyLane(ri,l){rounds[ri].enemy[l]=[];renderEB(ri,l);}
 
 // ═══════ CORE: SIMULATION ═══════
@@ -1125,7 +1122,7 @@ function doImport(e){
       if(d.ourData){ourData=d.ourData;_calcDone=false;_enemyCollapsed=false;renderOur();}
       if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR){Object.assign(rounds[i],{
         mode:r.mode||"detailed",
-        enemy:r.enemy||[[],[],[]],
+        enemy:r.enemy?r.enemy.map(l=>l.slice(0,10)):[[],[],[]],
         bT:r.bT||["","",""],bC:r.bC||["10","10","10"],
         bA:r.bA||["","",""],bD:r.bD||["","",""],
         eA:r.eA||["","",""],eD:r.eD||["","",""],
@@ -1159,7 +1156,7 @@ function loadLS(){
     if(d.ourData)ourData=d.ourData;
     if(d.rounds)d.rounds.forEach((r,i)=>{if(i<NR)Object.assign(rounds[i],{
       mode:r.mode||"detailed",
-      enemy:r.enemy||[[],[],[]],
+      enemy:r.enemy?r.enemy.map(l=>l.slice(0,10)):[[],[],[]],
       bT:r.bT||["","",""],bC:r.bC||["10","10","10"],
       bA:r.bA||["","",""],bD:r.bD||["","",""],
       eA:r.eA||["","",""],eD:r.eD||["","",""],
