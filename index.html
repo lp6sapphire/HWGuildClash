@@ -573,13 +573,11 @@ function optimizeCore(pool,enemies){
   if(!bL)return null;
 
   // Detect empty enemy lanes — never swap/move players there
-  const _emptyL=new Set(enemies.map((e,i)=>e.length===0?i:-1).filter(i=>i>=0));
 
   // Phase 2: 1-on-1 swap optimization
   const lanes=bL.map(l=>[...l]);
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluate(lanes,enemies);
@@ -593,7 +591,6 @@ function optimizeCore(pool,enemies){
   // Phase 3: 2-on-2 swap optimization
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
         for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
           [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
@@ -610,13 +607,12 @@ function optimizeCore(pool,enemies){
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
-      if(_emptyL.has(lb))continue; // never move TO empty lane
-      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
+        if(lanes[la].length<=1||lanes[lb].length>=10)break;
         const p=lanes[la].splice(i,1)[0];
         lanes[lb].push(p);
         const r=evaluate(lanes,enemies);
-        if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;}
+        if(isBetter(r.flags,r.wins,r.risk,bF,bW,bR)){bF=r.flags;bW=r.wins;bR=r.risk;imp=true;i--;}
         else{lanes[lb].pop();lanes[la].splice(i,0,p);}
       }
     }
@@ -626,7 +622,6 @@ function optimizeCore(pool,enemies){
   // Phase 5: re-run swaps after moves may have changed lane sizes
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluate(lanes,enemies);
@@ -765,12 +760,10 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   let bRF=cur.robustFlags,bF=cur.flags,bMM=cur.minMargin,bW=cur.wins;
 
   // Detect empty enemy lanes — never swap/move players there
-  const _emptyL=new Set(enemies.map((e,i)=>e.length===0?i:-1).filter(i=>i>=0));
 
   // Phase 1: 1-on-1 swaps optimizing margins
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
@@ -784,7 +777,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   // Phase 2: 2-on-2 swaps
   for(let round=0;round<3;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i1=0;i1<lanes[la].length;i1++)for(let i2=i1+1;i2<lanes[la].length;i2++)
         for(let j1=0;j1<lanes[lb].length;j1++)for(let j2=j1+1;j2<lanes[lb].length;j2++){
           [lanes[la][i1],lanes[lb][j1]]=[lanes[lb][j1],lanes[la][i1]];
@@ -801,13 +793,12 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   for(let round=0;round<10;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=0;lb<3;lb++){
       if(la===lb)continue;
-      if(_emptyL.has(lb))continue; // never move TO empty lane
-      if(lanes[la].length<=1||lanes[lb].length>=10)continue;
       for(let i=0;i<lanes[la].length;i++){
+        if(lanes[la].length<=1||lanes[lb].length>=10)break;
         const p=lanes[la].splice(i,1)[0];
         lanes[lb].push(p);
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
-        if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;}
+        if(isBetterIns(r.robustFlags,r.flags,r.minMargin,r.wins,bRF,bF,bMM,bW)){bRF=r.robustFlags;bF=r.flags;bMM=r.minMargin;bW=r.wins;imp=true;i--;}
         else{lanes[lb].pop();lanes[la].splice(i,0,p);}
       }
     }
@@ -817,7 +808,6 @@ function optimizeCoreIns(pool,enemies,normalLanes){
   // Phase 4: re-swaps after moves
   for(let round=0;round<5;round++){let imp=false;
     for(let la=0;la<3;la++)for(let lb=la+1;lb<3;lb++){
-      if(_emptyL.has(la)||_emptyL.has(lb))continue;
       for(let i=0;i<lanes[la].length;i++)for(let j=0;j<lanes[lb].length;j++){
         [lanes[la][i],lanes[lb][j]]=[lanes[lb][j],lanes[la][i]];
         const r=evaluateIns(lanes,enemies,INS_UPSETS);
